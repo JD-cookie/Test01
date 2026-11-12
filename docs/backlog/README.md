@@ -24,7 +24,7 @@ Statuses: `idea` (no design doc yet), `designed` (has a design doc), `in progres
 | Decide what the app does beyond accounts | Product | idea | The project is for learning, so pick features that give the technology below real work to do: data worth tracing, deploys worth automating. |
 | OpenTelemetry | Observability | idea | Traces, metrics, and logs from the server, and maybe from the app too. Needs a collector and somewhere to view the data. Not designed yet. |
 | Container image for the server | DevOps | idea | A `Containerfile` built with podman. It's the first step toward CI/CD and Kubernetes. |
-| CI on GitHub Actions | DevOps | idea | Run the tests, lint, and typecheck on every push, and build and publish the server image to a registry, for example GHCR. Needs a GitHub remote, which the repo doesn't have yet. |
+| CI on GitHub Actions | DevOps | idea | Run the tests, lint, and typecheck on every push, and build and publish the server image to a registry, for example GHCR. The repo is on GitHub now. |
 | Local Kubernetes cluster | DevOps | idea | Suggested: k3s on the dev machine. It's a full Kubernetes distribution with its own container runtime, so it doesn't need Docker. Podman-built images run on it unchanged. Staging would run here. |
 | GitOps deploys (CD) | DevOps | idea | The desired state of each environment is declared in git, and a tool in the cluster, Argo CD or Flux, applies it automatically. Depends on the server image, CI, and the cluster. Not designed yet. |
 | Rate limiting of login and signup | Server, security | idea | Password guessing isn't throttled right now. Keep the counters in Valkey, not process memory, so they hold across instances. Gap from [001](../features/001-accounts.md#security). |

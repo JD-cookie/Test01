@@ -4,9 +4,11 @@ Last updated 2026-11-12. This is a handoff note between working sessions. The sy
 
 ## Where things are
 
+- **Qodo hackathon** ("Build a Software Factory in 30 Days", 2026-11-02 to 2026-12-02): the user is entering with this project. There are 23 weekday challenges, and missed ones can be caught up before the final cutoff (midnight Pacific at the end of Dec 2). Each challenge gets a focused branch and PR with a Qodo review. The user posts each submission in that challenge's Discussion. Rules: https://hackathon.qodo.ai/rules/. Submission template: https://github.com/orgs/qodo-hackathon/discussions/1. Progress so far: none of the challenges are done. Day 1 (https://github.com/orgs/qodo-hackathon/discussions/2) still needs Qodo set up on the repo, an intro comment, and a first PR with one capability.
+
 - **Purpose:** a learning project, for exploring technology the user hasn't worked with before: phone apps, GitOps, OpenTelemetry, and more. Build things the real way, and explain new technology as it's introduced.
 
-- **Repo:** `/home/groot/Share/dev/git/feisty`. The project was renamed **test01**, but the directory keeps its old name on purpose. Branch `main`. First commit is `d5f3a9a` ("Create account & login works").
+- **Repo:** `/home/groot/Share/dev/git/feisty`. The project was renamed **test01**, but the directory keeps its old name on purpose. Branch `main`. Remote `origin` is `git@github-test01:JD-cookie/Test01.git` on GitHub. It's reached over SSH through a write-enabled **deploy key** for this repo only (`~/.ssh/github_test01`, with an `~/.ssh/config` alias `github-test01`). `main` has been pushed. The repo is **public**. For the GitHub API, the `gh` CLI (2.46) is logged in as `JD-cookie` with a fine-grained token limited to Test01 (issues, pull requests, contents read). Its config is in `~/.config/gh/hosts.yml`. `gh` resolves the `github-test01` alias without needing `-R`.
 - **Stack:**
   - App: Expo SDK 58 with React Native, TypeScript, and Expo Router, in `app/`.
   - Backend: Node 24 with Fastify and `node:sqlite`, in `server/`.
@@ -33,8 +35,9 @@ Last updated 2026-11-12. This is a handoff note between working sessions. The sy
 
 ## Open items and next steps
 
-1. On the phone, confirm that staying logged in (kill and reopen the app) and logging out both work.
-2. Everything else (deciding what the app does beyond accounts, rate limiting, password reset, production hosting, and so on) is in `docs/backlog/README.md`. Pick from there.
+1. Hackathon Day 1: the user signs up for Qodo and connects `JD-cookie/Test01`, then picks one small capability for the first PR. From now on, work goes on branches and into PRs, not straight to `main`.
+2. On the phone, confirm that staying logged in (kill and reopen the app) and logging out both work.
+3. Everything else (deciding what the app does beyond accounts, rate limiting, password reset, production hosting, and so on) is in `docs/backlog/README.md`. Pick from there.
 
 ## Working agreements and gotchas
 
