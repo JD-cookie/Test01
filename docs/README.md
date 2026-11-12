@@ -36,6 +36,7 @@ These documents are the **specification** of Test01. Together they hold enough d
 | # | Feature | Status |
 |---|---|---|
 | 001 | [Accounts: sign up, log in, stay logged in, log out](features/001-accounts.md) | Implemented |
+| 002 | [Rate limiting of login and signup](features/002-rate-limiting.md) | Implemented |
 
 Work that isn't built yet, with any design docs written for it, is tracked in [backlog/README.md](backlog/README.md). A design doc moves from `backlog/` into `features/` once it's built, and gets its number then.
 

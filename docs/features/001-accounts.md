@@ -87,7 +87,7 @@ All paths are under the API version prefix `/api/v1`, except `/api/health`. The 
 
 `field` appears only when the error concerns one input. `message` is written for end users. The client shows it as is.
 
-Error codes used by this feature: `VALIDATION_ERROR` (400), `BAD_REQUEST` (400, malformed JSON), `UNAUTHENTICATED` (401), `INVALID_CREDENTIALS` (401), `EMAIL_TAKEN` (409), `INTERNAL` (500). Codes shared by every endpoint, `NOT_FOUND` (404) and `UPGRADE_REQUIRED` (426), are defined in [../devops.md](../devops.md).
+Error codes used by this feature: `VALIDATION_ERROR` (400), `BAD_REQUEST` (400, malformed JSON), `UNAUTHENTICATED` (401), `INVALID_CREDENTIALS` (401), `EMAIL_TAKEN` (409), `INTERNAL` (500). Signup and login can also return `RATE_LIMITED` (429), which is defined in [002-rate-limiting.md](002-rate-limiting.md). Codes shared by every endpoint, `NOT_FOUND` (404) and `UPGRADE_REQUIRED` (426), are defined in [../devops.md](../devops.md).
 
 The **public user** object, which is the only form of a user that leaves the server:
 
@@ -103,7 +103,7 @@ The **public user** object, which is the only form of a user that leaves the ser
 
 Request: `{ "displayName": "Alice", "email": "Alice@Example.com", "password": "correct horse" }`
 
-Processing, in this order:
+Processing, in this order. First, the rate-limit check from [002](002-rate-limiting.md#processing-order-post-apiv1authsignup).
 1. Read each field as a string. A missing field or one that isn't a string counts as `""`.
 2. Normalize: trim `displayName`. Trim and lowercase `email`. Leave `password` exactly as sent.
 3. Validate in the order name → email → password, using the rules in the table above. Report only the **first** failure: `400 VALIDATION_ERROR` with that `field` and the message from the table.
@@ -116,6 +116,7 @@ Response: `201 { "token": "<token>", "user": <public user> }`
 
 Request: `{ "email": "alice@example.com", "password": "correct horse" }`
 
+- First, the rate-limit checks from [002](002-rate-limiting.md#processing-order-post-apiv1authlogin). A failed login is counted there, and a successful one clears the count.
 - Normalize the email the same way as signup. Don't validate the format; an email that doesn't match any account just fails.
 - If the email is unknown or the password is wrong, return `401 INVALID_CREDENTIALS` with the message "Incorrect email or password.". The response must be identical in both cases, including roughly the same response time: for an unknown email, verify the password against a dummy hash anyway. This stops anyone using login to find out which emails have accounts.
 - On success, create a new session. Earlier sessions stay valid.
@@ -160,8 +161,8 @@ Otherwise `401 UNAUTHENTICATED`, with the message "Your session has expired. Ple
 - **Tokens** are 32 cryptographically random bytes, encoded as base64url (43 characters). The server stores only their SHA-256 hash, so a leaked database can't be used to impersonate anyone.
 - **On the device**, the token and the cached public user are kept in the platform's secure storage: the Android Keystore or the iOS Keychain. They are never kept in plain app storage. Storage keys: `test01.session.token`, `test01.session.user` (JSON).
 - **CORS** allows any origin. This is fine for now because there are no browser clients and no cookies are used.
+- **Rate limiting** of signup and login is covered by [002-rate-limiting.md](002-rate-limiting.md).
 - **Not yet done** (known gaps, each tracked in [../backlog/README.md](../backlog/README.md)):
-  - Rate limiting of login and signup
   - Email verification
   - Password reset
   - HTTPS for development and staging (they use plain HTTP on the local network; production builds require HTTPS, see [../devops.md](../devops.md))
