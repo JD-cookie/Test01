@@ -78,7 +78,9 @@ The checks run automatically. A [husky](https://typicode.github.io/husky/) `pre-
 To run every check by hand: `npm run check` from the repo root.
 
 Notes:
-- The checks run against the files in your working tree, not only what's staged. Unstaged edits can make a check pass or fail.
+- The checks run against **what's staged**, not your working tree. The hook exports the index to a temporary directory with `git checkout-index`, links in each part's installed `node_modules` (plus Expo's generated `app/expo-env.d.ts` and `app/.expo/types`), and runs `check` there. Unstaged edits can't make a check pass or fail, and your working tree and index aren't touched.
+- Staged changes are detected with `git diff --cached --quiet -- server/` (and `app/`), so file names with unusual characters are handled.
+- If a part's `node_modules` is missing, the hook stops and tells you to run `npm --prefix <part> install`.
 - The hooks are turned on by `npm install` at the repo root, which runs husky's `prepare` script and sets `core.hooksPath` to `.husky/_`. A fresh clone has no hooks until you run it.
 - To skip the hook in an emergency, use `git commit --no-verify`. Don't make a habit of it: CI will run the same checks once it exists.
 - Git clients that don't load your shell profile (some GUIs) may not find `npm` from nvm. Husky reads `~/.config/husky/init.sh` before every hook, so you can add your nvm setup there.
