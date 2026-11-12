@@ -116,7 +116,7 @@ Response: `201 { "token": "<token>", "user": <public user> }`
 
 Request: `{ "email": "alice@example.com", "password": "correct horse" }`
 
-- First, the rate-limit checks from [002](002-rate-limiting.md#processing-order-post-apiv1authlogin). A failed login is counted there, and a successful one clears the count.
+- First, the rate-limit checks from [002](002-rate-limiting.md#processing-order-post-apiv1authlogin). Each attempt is counted there before the password is checked, and a successful login clears the count.
 - Normalize the email the same way as signup. Don't validate the format; an email that doesn't match any account just fails.
 - If the email is unknown or the password is wrong, return `401 INVALID_CREDENTIALS` with the message "Incorrect email or password.". The response must be identical in both cases, including roughly the same response time: for an unknown email, verify the password against a dummy hash anyway. This stops anyone using login to find out which emails have accounts.
 - On success, create a new session. Earlier sessions stay valid.

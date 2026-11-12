@@ -10,7 +10,7 @@ The server limits how often one client can try to log in or sign up. This slows 
 
 | Term | Meaning |
 |---|---|
-| **Client** | Where a request comes from, for limiting purposes. For IPv4 it's the client's IP address. For IPv6 it's the address's /64 network, because one device or home usually holds a whole /64 and could otherwise use a fresh address for every attempt. An IPv4-mapped IPv6 address (`::ffff:192.0.2.1`) counts as its IPv4 address. |
+| **Client** | Where a request comes from, for limiting purposes. For IPv4 it's the client's IP address. For IPv6 it's the address's /64 network, because one device or home usually holds a whole /64 and could otherwise use a fresh address for every attempt. An IPv4-mapped IPv6 address counts as its IPv4 address, however it's written: `::ffff:192.0.2.1`, `::ffff:c000:201`, and `0:0:0:0:0:ffff:192.0.2.1` are all `192.0.2.1`. A string that isn't a valid IP address is used as it is. |
 | **Limit** | At most `max` counted events per window for one key. |
 | **Window** | A fixed period that starts at a key's first counted event. When it ends, the key's count goes back to zero. It doesn't slide, and further events don't extend it. |
 | **Store** | Where the counters live: Valkey, or process memory. |
@@ -20,7 +20,7 @@ The server limits how often one client can try to log in or sign up. This slows 
 | Name | Key | Counts | Limit | Applies to |
 |---|---|---|---|---|
 | Login requests per client | client | every login request, whatever the outcome | 100 per 15 minutes | `POST /api/v1/auth/login` |
-| Failed logins per client and email | client + normalized email | failed logins only. A successful login clears it. | 5 per 15 minutes | `POST /api/v1/auth/login` |
+| Failed logins per client and email | client + normalized email | every login attempt, counted before the password is checked. A successful login clears the count, so in effect it counts failures since the last success. | 5 per 15 minutes | `POST /api/v1/auth/login` |
 | Signup requests per client | client | every signup request, including rejected ones | 20 per hour | `POST /api/v1/auth/signup` |
 
 Why these numbers and keys:
@@ -51,10 +51,12 @@ Retry-After: 900
 These steps come before the steps in [001](001-accounts.md#post-apiv1authlogin):
 
 1. Count the request against **login requests per client**. If the count is now over the limit, return `429`.
-2. Normalize the email as 001 does. If **failed logins per client and email** has already reached 5, return `429` without checking the password. This holds **even if the password is right**. Otherwise, after a block, a correct guess would get a different response from a wrong one, and guessing could carry on at full speed.
+2. Normalize the email as 001 does. Count the attempt against **failed logins per client and email**. If the count is now over 5, return `429` without checking the password. This holds **even if the password is right**. Otherwise, after a block, a correct guess would get a different response from a wrong one, and guessing could carry on at full speed.
 3. Check the email and password as 001 does.
-   - On failure, count one failure against **failed logins per client and email**, then return `401 INVALID_CREDENTIALS`. The 5th failure still returns `401`. The 6th attempt gets `429`.
-   - On success, clear that client and email's failure count, then continue as 001 does.
+   - On failure, leave the count as it is and return `401 INVALID_CREDENTIALS`. The 5th failure still returns `401`. The 6th attempt gets `429`.
+   - On success, clear that client and email's count, then continue as 001 does.
+
+The attempt is counted **before** the password check, and counting is atomic. Checking the password takes tens of milliseconds, by design. If attempts were counted only after it, a burst of parallel guesses could all get past the check before any of them had been counted. Counting first means at most 5 password checks per window, however many requests arrive at once. A success clears only the count. Parallel failures can't put a count back afterwards, because they were counted before their checks began.
 
 Unknown emails are counted like known ones, so the responses still don't reveal which emails have accounts.
 
@@ -109,7 +111,7 @@ VALKEY_URL=redis://127.0.0.1:6379/0 npm run dev
 
 - `server/src/ratelimit.ts`:
   - `RateLimitStore`, the store interface, with `MemoryRateLimitStore` and `ValkeyRateLimitStore` (using the `iovalkey` client)
-  - `RateLimiter`, which applies limits and fails open
+  - `RateLimiter`, which counts against a limit (`hit`), clears a count (`reset`), and fails open
   - `clientKey`, which turns an IP address into a client key (IPv6 /64)
   - `emailKey` and `waitText`
   - `DEFAULT_LIMITS`
@@ -127,9 +129,10 @@ VALKEY_URL=redis://127.0.0.1:6379/0 npm run dev
 3. `ALICE@example.com`, ` Alice@Example.com`, and `alice@example.com` all count as one email.
 4. 4 failures, a success, then 4 more failures: no `429`.
 5. 10 minutes into a block, the message says "5 minutes". After 15 minutes, logging in works again.
-6. Failures from `2001:db8:1:2::1` through `2001:db8:1:2::5` block `2001:db8:1:2:ffff:ffff:ffff:ffff`, but not `2001:db8:1:3::1`. `::ffff:192.0.2.9` and `192.0.2.9` count as the same client.
-7. With a cap of 3 login requests per client, the 4th request gets `429`, even after 3 successful logins. Other clients are unaffected.
-8. Signups count rejected requests (`400`) as well as accepted ones. The cap resets when the window ends.
-9. Without `TRUST_PROXY`, changing `X-Forwarded-For` doesn't change the client. With `TRUST_PROXY` set to the proxy's address, it does.
-10. With the store failing on every call, signup and login behave as if there were no limits.
-11. With Valkey: the counts are shared between server processes, and each key expires when its window ends. With Valkey stopped: logins still work, respond quickly, and an error is logged for each request.
+6. Failures from `2001:db8:1:2::1` through `2001:db8:1:2::5` block `2001:db8:1:2:ffff:ffff:ffff:ffff`, but not `2001:db8:1:3::1`. `::ffff:192.0.2.9` and `192.0.2.9` count as the same client, and so do `::ffff:c000:201` and `192.0.2.1`. `::ffff:c000:202` is a different client.
+7. 20 wrong-password logins sent at once, for one email from one client: exactly 5 get `401`, and 15 get `429`.
+8. With a cap of 3 login requests per client, the 4th request gets `429`, even after 3 successful logins. Other clients are unaffected.
+9. Signups count rejected requests (`400`) as well as accepted ones. The cap resets when the window ends.
+10. Without `TRUST_PROXY`, changing `X-Forwarded-For` doesn't change the client. With `TRUST_PROXY` set to the proxy's address, it does.
+11. With the store failing on every call, signup and login behave as if there were no limits.
+12. With Valkey: the counts are shared between server processes, and each key expires when its window ends. With Valkey stopped: logins still work, respond quickly, and an error is logged for each request.

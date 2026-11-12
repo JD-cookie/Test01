@@ -52,6 +52,19 @@ describe('login failures per client and email', () => {
     }
   });
 
+  test('a burst of parallel guesses gets no more than 5 password checks', async () => {
+    const { app, login } = await setup();
+    try {
+      const results = await Promise.all(Array.from({ length: 20 }, () => login(wrong)));
+      const codes = results.map((r) => r.statusCode);
+      assert.equal(codes.filter((c) => c === 401).length, 5);
+      assert.equal(codes.filter((c) => c === 429).length, 15);
+      assertLimited(await login(alice));
+    } finally {
+      await app.close();
+    }
+  });
+
   test('other emails from the same client, and the same email from other clients, still work', async () => {
     const { app, login, signup } = await setup();
     try {
@@ -207,6 +220,14 @@ test('clientKey', () => {
   assert.equal(clientKey('::1'), '0:0:0:0::/64');
   assert.equal(clientKey('fe80::1%eth0'), 'fe80:0:0:0::/64');
   assert.equal(clientKey('64:ff9b::192.0.2.1'), '64:ff9b:0:0::/64');
+  // Every way of writing an IPv4-mapped address gives the IPv4 address.
+  assert.equal(clientKey('::ffff:c000:201'), '192.0.2.1');
+  assert.equal(clientKey('::FFFF:C000:0201'), '192.0.2.1');
+  assert.equal(clientKey('0:0:0:0:0:ffff:192.0.2.1'), '192.0.2.1');
+  assert.equal(clientKey('::ffff:c000:202'), '192.0.2.2');
+  // Not an IP address: used as it is.
+  assert.equal(clientKey('not-an-ip'), 'not-an-ip');
+  assert.equal(clientKey('1:2:3'), '1:2:3');
 });
 
 test('waitText', () => {
@@ -221,9 +242,9 @@ test('waitText', () => {
 describe('ValkeyRateLimitStore', { skip: !process.env.VALKEY_URL && 'VALKEY_URL is not set' }, () => {
   test('hit, peek, reset, and expiry', async () => {
     const store = new ValkeyRateLimitStore(process.env.VALKEY_URL!);
-    await store.ready();
     const key = `rl:test:${process.pid}:${Date.now()}`;
     try {
+      await store.ready();
       assert.deepEqual(await store.peek(key), { count: 0, resetMs: 0 });
       const first = await store.hit(key, 300);
       assert.equal(first.count, 1);
@@ -238,18 +259,19 @@ describe('ValkeyRateLimitStore', { skip: !process.env.VALKEY_URL && 'VALKEY_URL 
       assert.equal((await store.peek(key)).count, 0);
       assert.equal((await store.hit(key, 100)).count, 1);
     } finally {
-      await store.reset(key);
+      await store.reset(key).catch(() => {});
       await store.close();
     }
   });
 
   test('the app works with Valkey', async () => {
     const store = new ValkeyRateLimitStore(process.env.VALKEY_URL!);
-    await store.ready();
     const ip = `192.0.2.${Math.floor(Math.random() * 200) + 1}`;
     const email = `v${Date.now()}@example.com`;
+    // The app closes the store when it closes, so build it first and close it in `finally`.
     const app = buildApp({ dbPath: ':memory:', rateLimitStore: store });
     try {
+      await store.ready();
       const post = (path: string, body: object) =>
         app.inject({ method: 'POST', url: `/api/v1/auth/${path}`, payload: body, remoteAddress: ip });
       assert.equal((await post('signup', { ...alice, email })).statusCode, 201);

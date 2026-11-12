@@ -272,20 +272,21 @@ export function buildApp(opts: AppOptions) {
 
     const email = normalizeEmail(str(req.body, 'email'));
     const password = str(req.body, 'password');
-    // Checked before the password, so a blocked client can't keep guessing. This applies
-    // even to the right password, otherwise the response would reveal which guess was right.
+    // Each attempt is counted *before* the password is checked, in one atomic step. Counting
+    // only after the (slow) check would let a burst of parallel guesses all get past the limit
+    // before any of them was counted. A blocked request is refused even with the right
+    // password, otherwise the response would reveal which guess was right.
     const failuresKey = `rl:login:fail:${client}:${emailKey(email)}`;
-    wait = await limiter.blocked(failuresKey, limits.loginFailuresPerClientEmail);
+    wait = await limiter.hit(failuresKey, limits.loginFailuresPerClientEmail);
     if (wait !== undefined) throw rateLimited(wait);
 
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as
       | UserRow
       | undefined;
     const ok = await verifyPassword(password, user?.password_hash ?? (await getDummyHash()));
-    if (!user || !ok) {
-      await limiter.hit(failuresKey, limits.loginFailuresPerClientEmail);
-      throw new ApiError(401, 'INVALID_CREDENTIALS', 'Incorrect email or password.');
-    }
+    // A failure leaves its count in place.
+    if (!user || !ok) throw new ApiError(401, 'INVALID_CREDENTIALS', 'Incorrect email or password.');
+    // A success clears the count, including its own.
     await limiter.reset(failuresKey);
     return { token: createSession(db, user.id), user: toPublic(user) };
   });

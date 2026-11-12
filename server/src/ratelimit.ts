@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { isIPv4, isIPv6 } from 'node:net';
 import { Valkey } from 'iovalkey';
 
 /** A fixed-window limit: at most `max` counted events per `windowMs`. */
@@ -190,17 +191,6 @@ export class RateLimiter {
     }
   }
 
-  /** Without counting anything: returns the time until the window ends if the limit is already reached. */
-  async blocked(key: string, limit: Limit): Promise<number | undefined> {
-    try {
-      const c = await this.#store.peek(key);
-      return c.count >= limit.max ? c.resetMs : undefined;
-    } catch (err) {
-      this.#onError(err);
-      return undefined;
-    }
-  }
-
   async reset(key: string): Promise<void> {
     try {
       await this.#store.reset(key);
@@ -217,25 +207,41 @@ export class RateLimiter {
 /**
  * The part of a client IP address that limits are counted against.
  * - IPv4: the whole address.
- * - IPv4-mapped IPv6 (`::ffff:1.2.3.4`): the IPv4 address, so both forms count together.
+ * - IPv4-mapped IPv6 (`::ffff:192.0.2.1`, also written `::ffff:c000:201`): the IPv4 address,
+ *   so every form of one address counts together.
  * - IPv6: the /64 network. One device or home network usually gets a whole /64, so counting
  *   single IPv6 addresses would let one client spread its attempts over millions of addresses.
+ * - Anything that isn't a valid IP address is used as it is.
  */
 export function clientKey(ip: string): string {
-  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
-  if (mapped) return mapped[1];
-  if (!ip.includes(':')) return ip;
+  if (isIPv4(ip)) return ip;
+  const groups = ipv6Groups(ip);
+  if (!groups) return ip;
+  if (groups.slice(0, 5).every((g) => g === 0) && groups[5] === 0xffff)
+    return [groups[6] >> 8, groups[6] & 0xff, groups[7] >> 8, groups[7] & 0xff].join('.');
+  return `${groups
+    .slice(0, 4)
+    .map((g) => g.toString(16))
+    .join(':')}::/64`;
+}
 
-  const addr = ip.split('%')[0].toLowerCase(); // drop any zone ID, e.g. "fe80::1%eth0"
+/** The eight 16-bit groups of an IPv6 address, or undefined if it isn't one. Ignores a zone ID. */
+function ipv6Groups(ip: string): number[] | undefined {
+  const addr = ip.split('%')[0]; // drop any zone ID, e.g. "fe80::1%eth0"
+  if (!isIPv6(addr)) return undefined;
+  const parse = (s: string) =>
+    s
+      ? s.split(':').flatMap((p) => {
+          if (!p.includes('.')) return [parseInt(p, 16)];
+          // A trailing embedded IPv4 address, e.g. "64:ff9b::1.2.3.4", fills two groups.
+          const [a, b, c, d] = p.split('.').map(Number);
+          return [(a << 8) | b, (c << 8) | d];
+        })
+      : [];
   const [headStr, tailStr] = addr.split('::');
-  const parts = (s: string | undefined) =>
-    // A trailing embedded IPv4 address, e.g. "64:ff9b::1.2.3.4", fills two 16-bit groups.
-    s ? s.split(':').flatMap((p) => (p.includes('.') ? ['0', '0'] : [p])) : [];
-  const head = parts(headStr);
-  const tail = tailStr === undefined ? [] : parts(tailStr);
-  const groups = [...head, ...Array(Math.max(0, 8 - head.length - tail.length)).fill('0'), ...tail];
-  const prefix = groups.slice(0, 4).map((g) => parseInt(g, 16).toString(16));
-  return `${prefix.join(':')}::/64`;
+  const head = parse(headStr);
+  const tail = tailStr === undefined ? [] : parse(tailStr);
+  return [...head, ...Array<number>(8 - head.length - tail.length).fill(0), ...tail];
 }
 
 /**
