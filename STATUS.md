@@ -34,7 +34,8 @@ Last updated 2026-11-12. This is a handoff note between working sessions. The sy
 ## Open items and next steps
 
 1. On the phone, confirm that staying logged in (kill and reopen the app) and logging out both work.
-2. Everything else (deciding what the app does beyond accounts, rate limiting, password reset, production hosting, and so on) is in `docs/backlog/README.md`. Pick from there.
+2. Release App setup (user, in GitHub; steps in `docs/devops.md` → Versioning and releases). The App exists, with Client ID `Iv23liyEkVVtGp2Shoka` (not secret). Still to do: install it on Test01, create the `release` environment limited to `main` holding the `RELEASE_APP_PRIVATE_KEY` secret, and add `RELEASE_APP_CLIENT_ID` as a **repository** variable. Repo settings: squash merging only with the PR title, and workflow permissions read-only. Claude's gh token can't see Actions variables or secrets (403), and that's intended.
+3. Everything else (deciding what the app does beyond accounts, rate limiting, password reset, production hosting, and so on) is in `docs/backlog/README.md`. Pick from there.
 
 ## Working agreements and gotchas
 

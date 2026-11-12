@@ -147,11 +147,14 @@ Files: `release-please-config.json` (components, changelog sections, PR title, a
    - **Where can this GitHub App be installed?** Only on this account.
 2. Create the App. On its page, note the **Client ID**. Under "Private keys", **generate a private key**, which downloads a `.pem` file.
 3. **Install App** → only select repositories → `Test01`.
-4. In the Test01 repo → Settings → Secrets and variables → Actions:
-   - **Variables** tab: `RELEASE_APP_CLIENT_ID` = the Client ID. It's not secret.
-   - **Secrets** tab: `RELEASE_APP_PRIVATE_KEY` = the whole contents of the `.pem` file. Then delete the downloaded file.
+4. In the Test01 repo → Settings → **Environments → New environment**, named `release`:
+   - **Deployment branches and tags:** "Selected branches and tags" → add the branch rule `main`.
+   - **Environment secrets:** `RELEASE_APP_PRIVATE_KEY` = the whole contents of the `.pem` file. Then delete the downloaded file.
+5. In the Test01 repo → Settings → Secrets and variables → Actions → **Variables** tab → New **repository** variable: `RELEASE_APP_CLIENT_ID` = the Client ID.
 
-Until `RELEASE_APP_CLIENT_ID` is set, the release workflow's job is skipped rather than failing.
+Why the split: the private key is the sensitive part. As an environment secret limited to `main`, only jobs that run on `main` and name `environment: release` can read it. A workflow someone pushes on another branch can't, which a repository secret wouldn't prevent. The Client ID isn't secret, and it must be a repository variable because the job's `if:` that checks it is evaluated before the job enters the environment.
+
+Until `RELEASE_APP_CLIENT_ID` is set, the release workflow's job is skipped rather than failing. Each run shows up as a deployment to `release` on the repo page. That's expected: GitHub records every job that uses an environment as a deployment.
 
 ## CI
 
