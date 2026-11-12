@@ -39,6 +39,8 @@ Last updated 2026-11-12. This is a handoff note between working sessions. The sy
 ## Working agreements and gotchas
 
 - **New requests and known gaps go in `docs/backlog/README.md`**, not in this file. A design doc, if there is one, sits next to it as `docs/backlog/<slug>.md`. When it's built, it moves to `docs/features/NNN-<slug>.md`. The steps are in the backlog README.
+- **Commit messages / PR titles: Conventional Commits** (`feat(server): …`, `fix(app): …`, `docs: …`), enforced by a `commit-msg` hook (commitlint) and by CI's `pr-title` job. PRs get squash-merged with the PR title as the commit. Versions and `server/CHANGELOG.md` and `app/CHANGELOG.md` come from release-please. Never bump versions or edit changelogs by hand. See `docs/devops.md` → Versioning and releases.
+- **CI** (`.github/workflows/ci.yml`): server check (with a Valkey service), app check, and PR title. Workflow rules: read-only token by default, actions pinned to full SHAs, no `pull_request_target`. Run actionlint via podman before pushing workflow changes.
 - **Git hooks:** husky (repo-root `package.json`) runs a `pre-commit` hook that runs `npm run check` in `server/` and/or `app/`, for whichever has staged changes. Run `npm install` at the root after cloning to turn it on. Don't bypass it with `--no-verify` unless the user asks.
 - **Every feature gets a doc** in `docs/features/NNN-*.md`, written in the same change that builds it. It must hold enough detail to reimplement the system from the docs alone. See `docs/README.md` for what each doc should contain. Operational changes go in `docs/devops.md`.
 - Use `npx expo install <pkg>` for app packages. `app/.npmrc` sets `legacy-peer-deps=true` to get past a `react-dom` 19.3.1 / `react` 19.3.0 peer conflict in SDK 58.

@@ -1,0 +1,3 @@
+# Rejects commit messages that don't follow Conventional Commits (see commitlint.config.mjs).
+# Skip it in an emergency with `git commit --no-verify`.
+npx --no -- commitlint --edit "$1"

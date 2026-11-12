@@ -4,9 +4,12 @@
   "description": "Repo-level tooling: git hooks. The app and server have their own package.json.",
   "scripts": {
     "prepare": "husky",
-    "check": "npm --prefix server run check && npm --prefix app run check"
+    "check": "npm --prefix server run check && npm --prefix app run check",
+    "commitlint": "commitlint"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
     "husky": "^9.1.7"
   }
 }
