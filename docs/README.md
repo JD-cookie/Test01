@@ -1,5 +1,7 @@
 # Test01 system documentation
 
+Test01 is a learning project: a realistic mobile app and backend for exploring phone apps, GitOps, OpenTelemetry, and other technology (see the [top-level README](../README.md)).
+
 These documents are the **specification** of Test01. Together they hold enough detail to rebuild the system from scratch, in any technology. A rebuilt version needn't look identical, but it should behave the same way, so someone who has used the original would find it familiar.
 
 ## Architecture
@@ -9,13 +11,13 @@ These documents are the **specification** of Test01. Together they hold enough d
 │  Mobile app           │  ─────────────────▶  │  Backend API          │
 │  (Android now, iOS    │   Bearer token auth  │  (single process)     │
 │   later)              │  ◀─────────────────  │                       │
-│  Secure storage for   │                      │  SQLite database      │
+│  Secure storage for   │                      │  Relational database  │
 │  the session token    │                      │                       │
 └──────────────────────┘                      └───────────────────────┘
 ```
 
 - **The client** is a single cross-platform mobile app. Its whole state comes from the API, except for the cached session.
-- **The server** is a stateless HTTP API with a single relational database. Every rule is enforced on the server. The client repeats some checks only to give quicker feedback.
+- **The server** is a stateless HTTP API with a single relational database: SQLite in development, a database server in staging and production. State shared between server instances goes in Valkey, never in process memory. See [devops.md](devops.md#environments). Every rule is enforced on the server. The client repeats some checks only to give quicker feedback.
 - **API conventions**, which every feature follows:
   - Paths start with `/api/v1/`. The version only changes for breaking changes; see [devops.md](devops.md).
   - Every request from the app sends `X-App-Version`. Apps older than the server's minimum get `426 UPGRADE_REQUIRED`.
@@ -34,6 +36,8 @@ These documents are the **specification** of Test01. Together they hold enough d
 | # | Feature | Status |
 |---|---|---|
 | 001 | [Accounts: sign up, log in, stay logged in, log out](features/001-accounts.md) | Implemented |
+
+Work that isn't built yet, with any design docs written for it, is tracked in [backlog/README.md](backlog/README.md). A design doc moves from `backlog/` into `features/` once it's built, and gets its number then.
 
 ## Writing a feature doc
 

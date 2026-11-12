@@ -10,10 +10,15 @@ This doc explains how Test01 is configured, tested, built, and released in each 
 | **App** | none | Expo Go, live reload | `staging` APK | `production` APK |
 | **App name / ID** | — | Test01 (Dev) / `com.test01.app.dev` | Test01 (Staging) / `com.test01.app.staging` | Test01 / `com.test01.app` |
 | **Server** | started inside the test process | `npm run dev` on the dev machine, port 3000 | a separate server process on port 4000 (dev machine for now) | an always-on host, not chosen yet |
-| **Database** | new in-memory SQLite for every test | `server/data/test01.db` | its own file, e.g. `server/data/staging.db` | its own file on the production host, backed up |
+| **Database** | new in-memory SQLite for every test | SQLite, `server/data/test01.db` | **planned:** a database server, not chosen yet. For now, its own SQLite file, e.g. `server/data/staging.db` | **planned:** a database server, not chosen yet, backed up |
+| **Shared state** (rate limits, caches) | none | none: one process | **planned:** Valkey | **planned:** Valkey |
 | **Transport** | in-process | HTTP on the LAN | HTTP on the LAN | **HTTPS only** (the production build refuses anything else) |
 
 Each app variant has its own app ID, so the Dev, Staging, and production apps can be installed on the same phone side by side. Each keeps its own login. Each server has its own database, so the environments never share data.
+
+**Containers.** Use podman and buildah, not Docker. Container files are named `Containerfile`. Kubernetes runs any OCI image, so podman-built images need no changes.
+
+**Data store plan.** SQLite is for development and tests only. Staging and production will use a client-server relational database, so that several server instances can run against the same data. The database hasn't been chosen yet. Shared state between instances, such as rate-limit counters, will go in Valkey, the open-source fork of Redis, and never in process memory. Until this is built, the server supports only one instance per database. It doesn't need sticky load balancing, because sessions live in the database. The work is tracked in [backlog/README.md](backlog/README.md).
 
 ## Configuration reference
 
@@ -76,6 +81,7 @@ Installed apps stay on whatever version they were installed at until someone upd
 
 - The schema is changed by an ordered list of SQL migrations in `server/src/db.ts`. The database records how many have run in `PRAGMA user_version`. On startup, the server runs any missing migrations, each inside a transaction.
 - Never edit a migration that has shipped. Add a new one instead.
+- Keep schema and queries portable (plain types, no SQLite-only features), because staging and production will move to a different database. See the data store plan under [Environments](#environments).
 - Make migrations compatible with the app versions still in use: add columns and tables rather than renaming or dropping them while older code still depends on them.
 - Before a production deploy, test the new server against a **copy of the production database** in staging: copy the file and point staging's `DB_PATH` at the copy.
 

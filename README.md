@@ -2,6 +2,8 @@
 
 A mobile app (Expo / React Native, for Android now and iPhone later) with its own backend (Node + Fastify + SQLite).
 
+**Why this exists:** it's a learning project, for getting hands-on with technology I haven't worked with before: phone apps, GitOps, OpenTelemetry, and more. The app's features are mostly there to give that technology something real to do, so things are built the way a production system would build them, even where a shortcut would do for an app this size.
+
 - `app/`: the mobile app
 - `server/`: the backend API
 - `docs/`: the system spec, with one document per feature. **Start at [docs/README.md](docs/README.md).**

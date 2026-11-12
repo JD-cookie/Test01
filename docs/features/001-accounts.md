@@ -160,7 +160,7 @@ Otherwise `401 UNAUTHENTICATED`, with the message "Your session has expired. Ple
 - **Tokens** are 32 cryptographically random bytes, encoded as base64url (43 characters). The server stores only their SHA-256 hash, so a leaked database can't be used to impersonate anyone.
 - **On the device**, the token and the cached public user are kept in the platform's secure storage: the Android Keystore or the iOS Keychain. They are never kept in plain app storage. Storage keys: `test01.session.token`, `test01.session.user` (JSON).
 - **CORS** allows any origin. This is fine for now because there are no browser clients and no cookies are used.
-- **Not yet done** (known gaps, to be handled as their own features):
+- **Not yet done** (known gaps, each tracked in [../backlog/README.md](../backlog/README.md)):
   - Rate limiting of login and signup
   - Email verification
   - Password reset
