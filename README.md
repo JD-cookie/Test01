@@ -7,11 +7,20 @@ A mobile app (Expo / React Native, for Android now and iPhone later) with its ow
 - `app/`: the mobile app
 - `server/`: the backend API
 - `docs/`: the system spec, with one document per feature. **Start at [docs/README.md](docs/README.md).**
+- `package.json` and `.husky/` (repo root): git hooks only.
 
 ## Requirements
 
 - Node 24+ on the development machine
 - An Android phone on the **same Wi-Fi** as the development machine
+
+## After cloning
+
+```bash
+npm install                  # repo root: installs husky and turns on the git hooks
+npm --prefix server install
+npm --prefix app install
+```
 
 ## Run the backend
 
@@ -58,7 +67,18 @@ For the environments (dev, staging, production), the server settings, how to poi
 
 ## Checks before committing
 
-```bash
-cd server && npm test && npm run typecheck
-cd app && npm run lint && npm run typecheck
-```
+The checks run automatically. A [husky](https://typicode.github.io/husky/) `pre-commit` hook (`.husky/pre-commit`) runs `npm run check` for each part of the repo that has staged changes, and a failing check stops the commit:
+
+| Staged changes in | Runs | Which is |
+|---|---|---|
+| `server/` | `npm --prefix server run check` | `typecheck`, then `test` |
+| `app/` | `npm --prefix app run check` | `lint`, then `typecheck` |
+| anything else (docs, root files) | nothing | |
+
+To run every check by hand: `npm run check` from the repo root.
+
+Notes:
+- The checks run against the files in your working tree, not only what's staged. Unstaged edits can make a check pass or fail.
+- The hooks are turned on by `npm install` at the repo root, which runs husky's `prepare` script and sets `core.hooksPath` to `.husky/_`. A fresh clone has no hooks until you run it.
+- To skip the hook in an emergency, use `git commit --no-verify`. Don't make a habit of it: CI will run the same checks once it exists.
+- Git clients that don't load your shell profile (some GUIs) may not find `npm` from nvm. Husky reads `~/.config/husky/init.sh` before every hook, so you can add your nvm setup there.

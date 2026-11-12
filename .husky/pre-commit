@@ -1,0 +1,15 @@
+# Runs the checks for each part of the repo that has staged changes.
+# Husky runs this with `sh -e`, so a failing check stops the commit.
+# Skip it in an emergency with `git commit --no-verify`.
+
+staged=$(git diff --cached --name-only)
+
+if echo "$staged" | grep -q '^server/'; then
+  echo "pre-commit: server changed, running server checks"
+  npm --prefix server run check
+fi
+
+if echo "$staged" | grep -q '^app/'; then
+  echo "pre-commit: app changed, running app checks"
+  npm --prefix app run check
+fi

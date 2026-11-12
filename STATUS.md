@@ -39,6 +39,7 @@ Last updated 2026-11-12. This is a handoff note between working sessions. The sy
 ## Working agreements and gotchas
 
 - **New requests and known gaps go in `docs/backlog/README.md`**, not in this file. A design doc, if there is one, sits next to it as `docs/backlog/<slug>.md`. When it's built, it moves to `docs/features/NNN-<slug>.md`. The steps are in the backlog README.
+- **Git hooks:** husky (repo-root `package.json`) runs a `pre-commit` hook that runs `npm run check` in `server/` and/or `app/`, for whichever has staged changes. Run `npm install` at the root after cloning to turn it on. Don't bypass it with `--no-verify` unless the user asks.
 - **Every feature gets a doc** in `docs/features/NNN-*.md`, written in the same change that builds it. It must hold enough detail to reimplement the system from the docs alone. See `docs/README.md` for what each doc should contain. Operational changes go in `docs/devops.md`.
 - Use `npx expo install <pkg>` for app packages. `app/.npmrc` sets `legacy-peer-deps=true` to get past a `react-dom` 19.3.1 / `react` 19.3.0 peer conflict in SDK 58.
 - `app/AGENTS.md`, from the Expo template, says Expo changes often: check the versioned docs at docs.expo.dev rather than relying on memory.
