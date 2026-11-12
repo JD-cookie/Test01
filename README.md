@@ -77,7 +77,7 @@ fix(app): keep the form contents after a 429        → patch release
 docs: explain the release process                   → no release
 ```
 
-PRs are squash-merged, so the **PR title** becomes the commit on `main` and the changelog line. CI checks it. Versions and changelogs are then handled by release-please: merging its release PR tags and publishes a release. The full rules, including what counts as breaking, are in [docs/devops.md → Versioning and releases](docs/devops.md#versioning-and-releases).
+PRs are squash-merged, so the **PR title** becomes the commit on `main` and the changelog line. CI checks it. Breaking changes need the `!` in the title. Versions and changelogs are then handled by release-please: merging its release PR tags and publishes a release. The full rules, including what counts as breaking, are in [docs/devops.md → Versioning and releases](docs/devops.md#versioning-and-releases).
 
 ## Checks before committing
 
@@ -96,6 +96,7 @@ Notes:
 - `typegen` (`app/scripts/generate-types.mjs`) writes the files `expo start` normally generates: `expo-env.d.ts`, and Expo Router's typed routes in `.expo/types/router.d.ts`. Both are git-ignored, so they're rebuilt from the files being checked. A staged route rename or deletion is then caught by the typecheck, and the check works on a fresh clone, or in CI, without running `expo start` first. It calls an internal `@expo/cli` function, so an Expo upgrade may break it. If it does, it fails loudly.
 - Staged changes are detected with `git diff --cached --quiet -- server/` (and `app/`), so file names with unusual characters are handled.
 - If a part's `node_modules` is missing, the hook stops and tells you to run `npm --prefix <part> install`.
+- **After pulling a change that adds hook tooling** (such as commitlint), run `npm install` at the repo root again. Otherwise the hook stops and tells you to.
 - The hooks are turned on by `npm install` at the repo root, which runs husky's `prepare` script and sets `core.hooksPath` to `.husky/_`. A fresh clone has no hooks until you run it.
 - To skip the hook in an emergency, use `git commit --no-verify`. Don't make a habit of it: CI runs the same checks on every PR anyway.
 - Git clients that don't load your shell profile (some GUIs) may not find `npm` from nvm. Husky reads `~/.config/husky/init.sh` before every hook, so you can add your nvm setup there.

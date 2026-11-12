@@ -110,19 +110,21 @@ Every commit on `main` follows [Conventional Commits](https://www.conventionalco
 | `feat` | A new feature | minor |
 | `fix` | A bug fix | patch |
 | `perf` | A performance improvement | patch |
-| `deps` | A dependency update that affects the shipped code | patch |
 | `revert` | Reverts an earlier commit | patch |
-| `feat!`, `fix!`, …, or a `BREAKING CHANGE:` footer | A breaking change. The footer explains what users must do. | major (minor before 1.0) |
+| `feat!`, `fix!`, … (`!` before the colon) | A breaking change | major (minor before 1.0) |
 | `docs`, `test`, `refactor`, `build`, `ci`, `chore`, `style` | No change to shipped behavior | none |
 
+- **Dependency updates:** `fix(deps): update fastify to 5.13` when it changes what ships, which gives a patch release. Use `chore(deps): …` for dev-only tooling, which gives no release. This is the convention Dependabot and Renovate use.
 - **Scope** (optional): `app`, `server`, `docs`, `ci`, `repo`, `deps`, or `release`. It's for readers. The component a change belongs to comes from the **paths it touches**: `server/…` goes into the server's next release, and `app/…` into the app's. A commit touching both goes into both.
 - **The summary becomes a changelog line,** so write it for someone reading release notes: "rate limiting of login and signup", not "address review".
 - Examples: `feat(server): rate limiting of login and signup`, `fix(app): keep the form contents after a 429`, `feat(server)!: remove /api/v1`.
+- **Breaking changes must have the `!` in the PR title.** Only the title reaches `main` (see below), so a `BREAKING CHANGE:` footer in a commit inside the PR is lost. Explain what users must do in the PR description, and in the release PR's notes when it comes up.
 
 How it's enforced:
 - **Locally:** the `commit-msg` hook (`.husky/commit-msg`) runs commitlint (`commitlint.config.mjs`) and rejects anything else.
 - **PRs are squash-merged,** so each PR becomes one commit on `main` and **the PR title is its message**. Commits inside a PR branch only need to pass the hook. The title is what ends up in the changelog, and CI checks it (`pr-title` job).
-- **Repo settings (once):** Settings → General → Pull Requests: allow **squash merging** only, and set its default commit message to **"Pull request title"**, or "Pull request title and description".
+- **Repo settings (once):** Settings → General → Pull Requests: allow **squash merging** only, and set its default commit message to **"Pull request title"**. The squash commit then has no body, so commit footers such as `BREAKING CHANGE:` or `Release-As:` never reach `main`. That's why breaking changes use `!` in the title, and a forced version uses the config (below).
+- Reviews of changes to `.github/` and `commitlint.config.mjs` matter. A PR runs its *own* version of the workflows, so a PR could loosen its own checks. CI can't prevent that, and review can.
 
 ### Releasing: release-please
 
@@ -135,7 +137,7 @@ Nothing is released until you **merge the release PR**. Merging it creates the g
 
 Files: `release-please-config.json` (components, changelog sections, PR title, and `bootstrap-sha`, the commit before which history is ignored) and `.release-please-manifest.json` (current versions).
 
-**Overriding the version:** add a commit with a `Release-As: 1.0.0` footer, e.g. `chore(server): release 1.0.0` with that footer, and release-please will propose exactly that version.
+**Overriding the version** (e.g. declaring 1.0.0): in a normal PR, add `"release-as": "1.0.0"` to that component's entry under `packages` in `release-please-config.json`. Once the release is out, remove it in the next PR, or every later release would also try to be 1.0.0. A `Release-As:` commit footer also works in release-please, but it doesn't survive squash merges here.
 
 **Authentication: a GitHub App, not `GITHUB_TOKEN`.** The repo setting "Allow GitHub Actions to create and approve pull requests" stays **off**. That setting lets any workflow approve its own PRs, which can get around required reviews. Instead, release-please uses a token from a small GitHub App that is installed only on this repo. The token is created fresh on each run, expires within an hour, and is narrowed in the workflow to contents, pull-requests, and issues write. A side benefit: PRs opened with `GITHUB_TOKEN` don't trigger other workflows, so CI wouldn't run on the release PR. With an App token it does. Setup, once:
 1. GitHub → Settings → Developer settings → **GitHub Apps → New GitHub App**.
@@ -159,9 +161,14 @@ Until `RELEASE_APP_CLIENT_ID` is set, the release workflow's job is skipped rath
 |---|---|
 | `server` | `npm ci` and `npm run check` (typecheck and tests) in `server/`, with a Valkey 9 service container and `VALKEY_URL` set, so the Valkey store tests run too |
 | `app` | `npm ci` and `npm run check` (typegen, lint, typecheck) in `app/` |
-| `pr-title` | PRs only: checks the PR title with the same commitlint rules as the commit hook |
 
-Editing a PR's title or description reruns only `pr-title`. A newer push to the same PR cancels the run in progress.
+And `.github/workflows/pr-title.yml` runs on PRs, including when the title is edited:
+
+| Job | What it does |
+|---|---|
+| `pr-title` | Checks the PR title with the same commitlint rules as the commit hook |
+
+They're separate workflows so that editing a title only reruns the title check, and can never cancel or replace the code checks of the same commit. In each workflow, a newer push to the same PR cancels that workflow's run in progress.
 
 Security conventions for every workflow in this repo:
 - **Least privilege:** the workflow-level `permissions:` is read-only, `contents: read`, or none at all (`{}`). A job that needs more asks for it explicitly. The repo's default workflow permissions should also be read-only: Settings → Actions → General → Workflow permissions → "Read repository contents and packages permissions".

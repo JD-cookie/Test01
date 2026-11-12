@@ -1,5 +1,6 @@
-# Runs the same checks as the pre-commit hook, on every PR and on every push to main,
-# plus a check that the PR title follows Conventional Commits (it becomes the squash commit).
+# Runs the same checks as the pre-commit hook, on every PR and on every push to main.
+# The PR title check is a separate workflow (pr-title.yml): it also runs when a title is
+# edited, and keeping it apart means an edit can never cancel or replace these checks.
 #
 # Security conventions for all workflows in this repo (see docs/devops.md, "CI"):
 # - The token is read-only by default; jobs ask for more only if they need it.
@@ -9,7 +10,6 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, edited, synchronize, reopened]
   push:
     branches: [main]
 
@@ -22,8 +22,6 @@ concurrency:
 
 jobs:
   server:
-    # A title or description edit doesn't change the code, so only the title check reruns.
-    if: github.event.action != 'edited'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -53,7 +51,6 @@ jobs:
       - run: npm run check
 
   app:
-    if: github.event.action != 'edited'
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -69,27 +66,3 @@ jobs:
           cache-dependency-path: app/package-lock.json
       - run: npm ci
       - run: npm run check
-
-  pr-title:
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: package-lock.json
-      - run: npm ci --ignore-scripts # --ignore-scripts: no need to install git hooks here
-      - name: Check the PR title
-        # The title is passed through an environment variable, never pasted into the script,
-        # so a crafted title can't inject shell commands.
-        env:
-          PR_TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          printf '%s\n' "$PR_TITLE" | npx --no commitlint || {
-            echo "::error::The PR title must follow Conventional Commits, e.g. 'feat(server): add rate limiting'. It becomes the commit message on main and sets the next version. See docs/devops.md, 'Versioning and releases'."
-            exit 1
-          }

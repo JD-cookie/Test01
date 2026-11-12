@@ -1,0 +1,42 @@
+# Checks that the PR title follows Conventional Commits. PRs are squash-merged with the
+# title as the commit message, so the title sets the next version and the changelog line.
+# See docs/devops.md, "Versioning and releases".
+#
+# This is separate from ci.yml on purpose: it reruns when the title is edited, and a
+# title edit must not cancel or replace the code checks of the same commit.
+name: PR title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts # --ignore-scripts: no need to install git hooks here
+      - name: Check the PR title
+        # The title is passed through an environment variable, never pasted into the script,
+        # so a crafted title can't inject shell commands.
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          printf '%s\n' "$PR_TITLE" | npx --no commitlint || {
+            echo "::error::The PR title must follow Conventional Commits, e.g. 'feat(server): add rate limiting'. It becomes the commit message on main and sets the next version. See docs/devops.md, 'Versioning and releases'."
+            exit 1
+          }
