@@ -31,12 +31,8 @@ for part in $parts; do
   ln -s "$root/$part/node_modules" "$snapshot/$part/node_modules"
 done
 
-# The app's typecheck also needs files that Expo generates and git ignores.
-if [ -f "$root/app/expo-env.d.ts" ]; then cp "$root/app/expo-env.d.ts" "$snapshot/app/"; fi
-if [ -d "$root/app/.expo/types" ]; then
-  mkdir -p "$snapshot/app/.expo"
-  cp -R "$root/app/.expo/types" "$snapshot/app/.expo/"
-fi
+# Nothing else is copied in from the working tree. Generated files, such as Expo's typed
+# routes, are rebuilt from the snapshot by each part's `check` (see app's `typegen`).
 
 for part in $parts; do
   echo "pre-commit: $part has staged changes, running its checks on the staged content"

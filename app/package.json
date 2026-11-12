@@ -30,7 +30,8 @@
     "web": "expo start --web",
     "lint": "expo lint",
     "typecheck": "tsc --noEmit",
-    "check": "npm run lint && npm run typecheck"
+    "check": "npm run typegen && npm run lint && npm run typecheck",
+    "typegen": "node scripts/generate-types.mjs"
   },
   "private": true
 }
