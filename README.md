@@ -7,7 +7,9 @@ A mobile app (Expo / React Native, for Android now and iPhone later) with its ow
 - `app/`: the mobile app
 - `server/`: the backend API
 - `docs/`: the system spec, with one document per feature. **Start at [docs/README.md](docs/README.md).**
-- `package.json` and `.husky/` (repo root): git hooks only.
+- `package.json`, `.husky/`, `commitlint.config.mjs` (repo root): git hooks and commit-message rules
+- `.github/workflows/`: CI and releases. `release-please-config.json` and `.release-please-manifest.json` configure versioning.
+- `server/CHANGELOG.md`, `app/CHANGELOG.md`: release notes, generated. Don't edit them by hand.
 
 ## Requirements
 
@@ -65,6 +67,18 @@ When the build finishes, open the link it prints on your phone and download the 
 
 For the environments (dev, staging, production), the server settings, how to point the app at a different server, versioning, and releases, see **[docs/devops.md](docs/devops.md)**.
 
+## Commit messages and releases
+
+Commit messages and PR titles follow [Conventional Commits](https://www.conventionalcommits.org), and the `commit-msg` hook enforces it:
+
+```
+feat(server): rate limiting of login and signup     → minor release
+fix(app): keep the form contents after a 429        → patch release
+docs: explain the release process                   → no release
+```
+
+PRs are squash-merged, so the **PR title** becomes the commit on `main` and the changelog line. CI checks it. Breaking changes need the `!` in the title. Versions and changelogs are then handled by release-please: merging its release PR tags and publishes a release. The full rules, including what counts as breaking, are in [docs/devops.md → Versioning and releases](docs/devops.md#versioning-and-releases).
+
 ## Checks before committing
 
 The checks run automatically. A [husky](https://typicode.github.io/husky/) `pre-commit` hook (`.husky/pre-commit`) runs `npm run check` for each part of the repo that has staged changes, and a failing check stops the commit:
@@ -82,6 +96,7 @@ Notes:
 - `typegen` (`app/scripts/generate-types.mjs`) writes the files `expo start` normally generates: `expo-env.d.ts`, and Expo Router's typed routes in `.expo/types/router.d.ts`. Both are git-ignored, so they're rebuilt from the files being checked. A staged route rename or deletion is then caught by the typecheck, and the check works on a fresh clone, or in CI, without running `expo start` first. It calls an internal `@expo/cli` function, so an Expo upgrade may break it. If it does, it fails loudly.
 - Staged changes are detected with `git diff --cached --quiet -- server/` (and `app/`), so file names with unusual characters are handled.
 - If a part's `node_modules` is missing, the hook stops and tells you to run `npm --prefix <part> install`.
+- **After pulling a change that adds hook tooling** (such as commitlint), run `npm install` at the repo root again. Otherwise the hook stops and tells you to.
 - The hooks are turned on by `npm install` at the repo root, which runs husky's `prepare` script and sets `core.hooksPath` to `.husky/_`. A fresh clone has no hooks until you run it.
-- To skip the hook in an emergency, use `git commit --no-verify`. Don't make a habit of it: CI will run the same checks once it exists.
+- To skip the hook in an emergency, use `git commit --no-verify`. Don't make a habit of it: CI runs the same checks on every PR anyway.
 - Git clients that don't load your shell profile (some GUIs) may not find `npm` from nvm. Husky reads `~/.config/husky/init.sh` before every hook, so you can add your nvm setup there.
