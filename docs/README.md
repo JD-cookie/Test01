@@ -38,7 +38,7 @@ These documents are the **specification** of Test01. Together they hold enough d
 | 001 | [Accounts: sign up, log in, stay logged in, log out](features/001-accounts.md) | Implemented |
 | 002 | [Rate limiting of login and signup](features/002-rate-limiting.md) | Implemented |
 
-Work that isn't built yet, with any design docs written for it, is tracked in [backlog/README.md](backlog/README.md). A design doc moves from `backlog/` into `features/` once it's built, and gets its number then.
+Work that isn't built yet, with any design docs written for it, is tracked in [backlog/README.md](backlog/README.md), which works as the ticket system. An item gets its number when it's marked `ready`, so its branch name `NNN-<slug>` is known in advance. Its design doc moves from `backlog/` into `features/` in the PR that builds it.
 
 ## Writing a feature doc
 
@@ -51,3 +51,4 @@ Every feature gets a numbered file in `features/`, written **in the same change*
 5. **Security and configuration**, plus known gaps
 6. **Implementation map**: where the feature lives in the current code. This is the only section tied to the current technology.
 7. **Acceptance checks**: concrete scenarios a rebuilt version has to pass
+8. **Delivery and review**: for features built from a ticket. Which acceptance checks passed and how they were checked, what the PR review found and what was done about each finding, and whether it led to a change in the rules (`AGENTS.md`), the skills, or the context reviewers get. Unlike the other sections, this one records the history of the build, not the behavior of the system.

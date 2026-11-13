@@ -7,6 +7,7 @@ A mobile app (Expo / React Native, for Android now and iPhone later) with its ow
 - `app/`: the mobile app
 - `server/`: the backend API
 - `AGENTS.md`: instructions and project rules for AI agents and reviewers (Qodo imports the rules as review standards). `CLAUDE.md` just imports it.
+- `docs/backlog/README.md`: the backlog, which is the ticket system. `scripts/ticket.sh` lists and claims tickets, and `.claude/skills/next-ticket/` is the agent skill that works through them.
 - `docs/`: the system spec, with one document per feature. **Start at [docs/README.md](docs/README.md).**
 - `package.json`, `.husky/`, `commitlint.config.mjs` (repo root): git hooks and commit-message rules
 - `.github/workflows/`: CI and releases. `release-please-config.json` and `.release-please-manifest.json` configure versioning.
