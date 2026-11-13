@@ -33,8 +33,9 @@ Last updated 2026-11-12. This is a handoff note between working sessions. The sy
 
 ## Open items and next steps
 
+0. PRs: #2 (husky) merged on 2026-11-13 as `135e219`. Its squash commit used the PR title, so the merge settings work. #3 (release process) was rebased onto main. #1 (rate limiting) is open. Merge #3 next, then rebase #1.
 1. On the phone, confirm that staying logged in (kill and reopen the app) and logging out both work.
-2. Release App setup (user, in GitHub; steps in `docs/devops.md` → Versioning and releases). The App exists, with Client ID `Iv23liyEkVVtGp2Shoka` (not secret). Still to do: install it on Test01, create the `release` environment limited to `main` holding the `RELEASE_APP_PRIVATE_KEY` secret, and add `RELEASE_APP_CLIENT_ID` as a **repository** variable. Repo settings: squash merging only with the PR title, and workflow permissions read-only. Claude's gh token can't see Actions variables or secrets (403), and that's intended.
+2. Release App setup: the user reports it's configured (2026-11-12). Verified through the API: a `release` environment exists, limited to the branch `main`. Claude's token can't see the secret, the repository variable, the App installation, the merge settings, or the workflow permissions (403, as intended). The real test is the first push to `main` after PR #3 merges: the Release Please run should get a token and, once a `feat`/`fix` commit is on `main`, open a `chore(release): …` PR. App Client ID `Iv23liyEkVVtGp2Shoka` (not secret). Setup steps: `docs/devops.md` → Versioning and releases.
 3. Everything else (deciding what the app does beyond accounts, rate limiting, password reset, production hosting, and so on) is in `docs/backlog/README.md`. Pick from there.
 
 ## Working agreements and gotchas
