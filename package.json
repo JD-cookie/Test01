@@ -1,0 +1,12 @@
+{
+  "name": "test01",
+  "private": true,
+  "description": "Repo-level tooling: git hooks. The app and server have their own package.json.",
+  "scripts": {
+    "prepare": "husky",
+    "check": "npm --prefix server run check && npm --prefix app run check"
+  },
+  "devDependencies": {
+    "husky": "^9.1.7"
+  }
+}

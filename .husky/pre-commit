@@ -1,0 +1,40 @@
+# Runs the checks for each part of the repo that has staged changes.
+#
+# The checks run against the *staged* content, not the working tree: the index is exported
+# to a temporary directory and checked there, so unstaged edits can't make a check pass or
+# fail. The working tree and index are never touched.
+#
+# Husky runs this with `sh -e`, so a failing check stops the commit.
+# Skip it in an emergency with `git commit --no-verify`.
+
+# Ask git which parts have staged changes. Pathspecs avoid parsing file names, which git
+# quotes when they contain unusual characters.
+parts=""
+for part in server app; do
+  if ! git diff --cached --quiet -- "$part/"; then
+    parts="$parts $part"
+  fi
+done
+[ -n "$parts" ] || exit 0
+
+root=$(git rev-parse --show-toplevel)
+snapshot=$(mktemp -d)
+trap 'rm -rf "$snapshot"' EXIT INT TERM
+git checkout-index --all --prefix="$snapshot/"
+
+for part in $parts; do
+  if [ ! -d "$root/$part/node_modules" ]; then
+    echo "pre-commit: $part/node_modules is missing. Run: npm --prefix $part install" >&2
+    exit 1
+  fi
+  # Dependencies aren't in git, so use the installed ones.
+  ln -s "$root/$part/node_modules" "$snapshot/$part/node_modules"
+done
+
+# Nothing else is copied in from the working tree. Generated files, such as Expo's typed
+# routes, are rebuilt from the snapshot by each part's `check` (see app's `typegen`).
+
+for part in $parts; do
+  echo "pre-commit: $part has staged changes, running its checks on the staged content"
+  npm --prefix "$snapshot/$part" run check
+done
