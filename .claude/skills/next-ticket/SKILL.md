@@ -29,7 +29,8 @@ Use a name that tells agents apart, e.g. `claude-<short session id>`. The script
 What the exit codes mean:
 - **0:** the ticket is yours, and you're on its branch.
 - **3:** another agent got there first. Go back to step 1 and take the next ticket. Never delete or overwrite another agent's branch, and never push to it with `--force`.
-- **2:** the ticket isn't `ready`, or your working tree is dirty, or a local branch is in the way. Fix that or ask the user.
+- **2:** the ticket isn't `ready`, your checkout has changes (untracked files count), a local branch is in the way, or the claim commit failed. Your checkout is left as it was. Fix the cause or ask the user.
+- **4:** `origin` couldn't be reached, so the outcome isn't known. If the script kept your local branch, run `scripts/ticket.sh verify NNN-slug` once `origin` is reachable. It returns 0 if the claim is yours and 3 if it isn't. Otherwise, try the claim again.
 
 ## 3. Build it
 
@@ -58,6 +59,7 @@ Read the ticket's design doc, `docs/backlog/NNN-slug.md`, all of it. Its accepta
 
 - After each push, check the PR about 10 minutes later, then again 30 minutes after that if nothing changed. Look for Qodo's review, CI results, and comments.
 - Fix each finding, or answer it with the reason it stays. Each fix is a new push, which starts the checks over.
+- **Keep the branch up to date with `main`.** Other tickets' PRs edit the same tables: the Features table in `docs/README.md` and the backlog table. When `main` moves on, merge it into your branch with `git fetch origin && git merge origin/main`. Don't rebase, so no force-push is needed. In a table conflict, keep both sides: every merged ticket's feature row stays, and every merged ticket's backlog row stays gone. Then run `npm run check` again and push. Do this before asking the user to merge, too.
 - Before the PR is merged, fill in the doc's **Delivery and review** section:
   - which acceptance checks passed, and how
   - what the review found, and what was done about each finding

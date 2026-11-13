@@ -33,7 +33,7 @@ Feature and work requests that aren't built yet. This file is the project's tick
 | # | Item | Area | Status | Notes |
 |---|---|---|---|---|
 | 003 | [Delete expired session rows](003-delete-expired-sessions.md) | Server | ready | Housekeeping only: expired sessions are already rejected. Gap from [001](../features/001-accounts.md#security). |
-| 004 | [Container image for the server](004-server-container-image.md) | DevOps | ready | A `Containerfile` built with podman. CI builds and smoke-tests it on every PR, and each server release (`server-vX.Y.Z` tag) publishes it to GHCR. The first step toward CD and Kubernetes. |
+| 004 | [Container image for the server](004-server-container-image.md) | DevOps | ready | A `Containerfile` built with podman. CI builds and smoke-tests it on every PR, and each server release made by release-please publishes it to GHCR. Needs a tag ruleset from the user first. The first step toward CD and Kubernetes. |
 |  | Decide what the app does beyond accounts | Product | idea | The project is for learning, so pick features that give the technology below real work to do: data worth tracing, deploys worth automating. |
 |  | OpenTelemetry | Observability | idea | Traces, metrics, and logs from the server, and maybe from the app too. Needs a collector and somewhere to view the data. Not designed yet. |
 |  | Local Kubernetes cluster | DevOps | idea | Suggested: k3s on the dev machine. It's a full Kubernetes distribution with its own container runtime, so it doesn't need Docker. Podman-built images run on it unchanged. Staging would run here. |
