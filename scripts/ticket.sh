@@ -55,7 +55,9 @@ list() {
   branches=$(printf '%s\n' "$heads" | sed 's|.*refs/heads/||')
   tickets | while read -r slug status; do
     [ "$status" = ready ] || continue
-    if printf '%s\n' "$branches" | grep -qx -- "$slug"; then
+    if ! git cat-file -e "origin/main:docs/backlog/$slug.md" 2>/dev/null; then
+      echo "$slug  not claimable: docs/backlog/$slug.md is missing on main"
+    elif printf '%s\n' "$branches" | grep -qx -- "$slug"; then
       echo "$slug  claimed (branch exists on origin)"
     else
       echo "$slug  ready"
@@ -108,6 +110,8 @@ claim() {
   status=$(tickets | awk -v t="$ticket" '$1 == t { $1 = ""; sub(/^ /, ""); print }')
   [ -n "$status" ] || die 2 "$ticket isn't a numbered ticket in $backlog on origin/main"
   [ "$status" = ready ] || die 2 "$ticket has status '$status' on origin/main, not 'ready'"
+  git cat-file -e "origin/main:docs/backlog/$ticket.md" 2>/dev/null ||
+    die 2 "$ticket is ready but its design doc docs/backlog/$ticket.md is missing on origin/main"
   existing=$(remote_head "$ticket") || die 4 "couldn't reach origin"
   [ -z "$existing" ] || die 3 "$ticket is already claimed: the branch exists on origin"
   if git show-ref --quiet "refs/heads/$ticket"; then
