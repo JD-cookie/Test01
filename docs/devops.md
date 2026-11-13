@@ -126,7 +126,8 @@ How it's enforced:
 - **Locally:** the `commit-msg` hook (`.husky/commit-msg`) runs commitlint (`commitlint.config.mjs`) and rejects anything else.
 - **PRs are squash-merged,** so each PR becomes one commit on `main` and **the PR title is its message**. Commits inside a PR branch only need to pass the hook. The title is what ends up in the changelog, and CI checks it (`pr-title` job).
 - **Repo settings (once):** Settings → General → Pull Requests: allow **squash merging** only, and set its default commit message to **"Pull request title"**. The squash commit then has no body, so commit footers such as `BREAKING CHANGE:` or `Release-As:` never reach `main`. That's why breaking changes use `!` in the title, and a forced version uses the config (below).
-- Reviews of changes to `.github/` and `commitlint.config.mjs` matter. A PR runs its *own* version of the workflows, so a PR could loosen its own checks. CI can't prevent that, and review can.
+- The `pr-title` job checks the title with the **base branch's** commitlint rules and version: it checks out the PR's base commit, not the PR. So a PR can't loosen `commitlint.config.mjs` or `package-lock.json` to pass its own check. A PR that changes the rules, e.g. adding a scope, is checked against the old rules and can't use the new scope in its own title yet.
+- Reviews of changes to `.github/` still matter. GitHub runs a PR's *own* version of the workflow files, so a PR that edits `pr-title.yml` could skip the check. Only `pull_request_target` (forbidden by `AGENTS.md` rule 5) or an organization ruleset with required workflows could prevent that, and neither fits here. The person merging can also type any commit message, so the check is there to catch mistakes, and review catches the rest.
 
 ### Releasing: release-please
 
@@ -171,7 +172,7 @@ And `.github/workflows/pr-title.yml` runs on PRs, including when the title is ed
 
 | Job | What it does |
 |---|---|
-| `pr-title` | Checks the PR title with the same commitlint rules as the commit hook |
+| `pr-title` | Checks the PR title with the same commitlint rules as the commit hook, as they are on the base branch |
 
 They're separate workflows so that editing a title only reruns the title check, and can never cancel or replace the code checks of the same commit. In each workflow, a newer push to the same PR cancels that workflow's run in progress.
 

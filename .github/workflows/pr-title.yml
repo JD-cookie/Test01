@@ -4,6 +4,13 @@
 #
 # This is separate from ci.yml on purpose: it reruns when the title is edited, and a
 # title edit must not cancel or replace the code checks of the same commit.
+#
+# The rules and the commitlint version come from the base branch, not from the PR: the job
+# checks out the base commit, so a PR can't loosen commitlint.config.mjs or package-lock.json
+# to pass its own title check. GitHub still runs this workflow file from the PR, so a PR that
+# edits this file could skip the check. Closing that would take pull_request_target (which
+# AGENTS.md rule 5 forbids) or an organization ruleset, so changes to .github/ need review
+# instead. The merger can also type any commit message: this check catches mistakes.
 name: PR title
 
 on:
@@ -23,6 +30,8 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # The base commit (main), not the PR: see the note at the top.
+          ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
