@@ -2,6 +2,13 @@
 
 All notable changes to the Test01 **server**. New entries are written by release-please from [Conventional Commits](https://www.conventionalcommits.org) when a release PR is merged; see `docs/devops.md` ("Versioning and releases"). Versions follow [SemVer](https://semver.org).
 
+## [0.2.0](https://github.com/JD-cookie/Test01/compare/server-v0.1.0...server-v0.2.0) (2026-11-13)
+
+
+### Features
+
+* **server:** rate limiting of login and signup ([#1](https://github.com/JD-cookie/Test01/issues/1)) ([178fd67](https://github.com/JD-cookie/Test01/commit/178fd6792d0301d0280f121b1a83454a8c8c6abb))
+
 ## 0.1.0 (2026-11-12)
 
 First version, from before the release process existed.
