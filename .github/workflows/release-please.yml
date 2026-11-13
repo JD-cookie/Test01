@@ -1,0 +1,46 @@
+# Keeps a release PR open that bumps the server and app versions and updates their
+# CHANGELOG.md files from the Conventional Commits merged to main. Merging that PR
+# tags the release (server-vX.Y.Z, app-vX.Y.Z) and creates GitHub releases.
+#
+# It authenticates as a GitHub App, not with GITHUB_TOKEN, so that:
+# - the repo setting "Allow GitHub Actions to create and approve pull requests" can stay off
+# - CI runs on the release PR (PRs opened with GITHUB_TOKEN don't trigger other workflows)
+# The App's private key is a secret of the `release` environment, which only the main branch
+# may use, so a workflow on any other branch can't read it. The Client ID is a repository
+# variable: it isn't secret, and the job's `if:` is checked before the environment is entered,
+# so an environment variable wouldn't be visible there.
+# Setup: docs/devops.md, "Versioning and releases". Until the App is set up, this job is skipped.
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+# GITHUB_TOKEN isn't used at all: the App token below does the work.
+permissions: {}
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    if: vars.RELEASE_APP_CLIENT_ID != ''
+    runs-on: ubuntu-24.04
+    environment: release
+    steps:
+      - name: Get a short-lived token from the release App
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          # Narrow the token to what release-please needs, even if the App has more.
+          permission-contents: write
+          permission-pull-requests: write
+          permission-issues: write
+      - uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

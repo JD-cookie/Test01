@@ -1,0 +1,8 @@
+# Rejects commit messages that don't follow Conventional Commits (see commitlint.config.mjs).
+# Skip it in an emergency with `git commit --no-verify`.
+
+if [ ! -x node_modules/.bin/commitlint ]; then
+  echo "commit-msg: commitlint isn't installed. Run \`npm install\` in the repo root, then commit again." >&2
+  exit 1
+fi
+node_modules/.bin/commitlint --edit "$1"

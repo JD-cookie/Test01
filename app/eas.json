@@ -1,9 +1,14 @@
 {
-  "cli": { "appVersionSource": "local" },
+  "cli": {
+    "appVersionSource": "remote"
+  },
   "build": {
     "staging": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "APP_VARIANT": "staging",
         "API_URL": "http://10.0.0.78:4000"
@@ -11,7 +16,10 @@
     },
     "production": {
       "distribution": "internal",
-      "android": { "buildType": "apk" },
+      "autoIncrement": true,
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "APP_VARIANT": "production"
       }

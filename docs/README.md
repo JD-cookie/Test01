@@ -29,7 +29,7 @@ These documents are the **specification** of Test01. Together they hold enough d
 
 ## Operations
 
-[devops.md](devops.md) covers the environments (test, development, staging, production), the app and server settings, API versioning and app compatibility, database changes, and how to build and deploy.
+[devops.md](devops.md) covers the environments (test, development, staging, production), the app and server settings, API versioning and app compatibility, database changes, version numbers and releases (Conventional Commits and release-please), CI, and how to build and deploy.
 
 ## Features
 
