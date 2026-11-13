@@ -11,14 +11,14 @@ This doc explains how Test01 is configured, tested, built, and released in each 
 | **App name / ID** | — | Test01 (Dev) / `com.test01.app.dev` | Test01 (Staging) / `com.test01.app.staging` | Test01 / `com.test01.app` |
 | **Server** | started inside the test process | `npm run dev` on the dev machine, port 3000 | a separate server process on port 4000 (dev machine for now) | an always-on host, not chosen yet |
 | **Database** | new in-memory SQLite for every test | SQLite, `server/data/test01.db` | **planned:** a database server, not chosen yet. For now, its own SQLite file, e.g. `server/data/staging.db` | **planned:** a database server, not chosen yet, backed up |
-| **Shared state** (rate limits, caches) | none | none: one process | **planned:** Valkey | **planned:** Valkey |
+| **Shared state** (rate limits, caches) | process memory | process memory (one process) | process memory until Valkey is set up there; then Valkey (`VALKEY_URL`) | Valkey (`VALKEY_URL`) |
 | **Transport** | in-process | HTTP on the LAN | HTTP on the LAN | **HTTPS only** (the production build refuses anything else) |
 
 Each app variant has its own app ID, so the Dev, Staging, and production apps can be installed on the same phone side by side. Each keeps its own login. Each server has its own database, so the environments never share data.
 
 **Containers.** Use podman and buildah, not Docker. Container files are named `Containerfile`. Kubernetes runs any OCI image, so podman-built images need no changes.
 
-**Data store plan.** SQLite is for development and tests only. Staging and production will use a client-server relational database, so that several server instances can run against the same data. The database hasn't been chosen yet. Shared state between instances, such as rate-limit counters, will go in Valkey, the open-source fork of Redis, and never in process memory. Until this is built, the server supports only one instance per database. It doesn't need sticky load balancing, because sessions live in the database. The work is tracked in [backlog/README.md](backlog/README.md).
+**Data store plan.** SQLite is for development and tests only. Staging and production will use a client-server relational database, so that several server instances can run against the same data. The database hasn't been chosen yet. Shared state between instances, such as rate-limit counters, goes in Valkey, the open-source fork of Redis, and never in process memory. The rate limiter ([002](features/002-rate-limiting.md)) already supports Valkey through `VALKEY_URL`. Without it, counters are kept in process memory, which is fine for development and tests only. Until this is built, the server supports only one instance per database. It doesn't need sticky load balancing, because sessions live in the database. The work is tracked in [backlog/README.md](backlog/README.md).
 
 ## Configuration reference
 
@@ -44,6 +44,8 @@ The app version comes from `version` in `app/app.json`. Every non-production scr
 | `HOST` | `0.0.0.0` | Interface to listen on. `0.0.0.0` lets phones on the LAN connect. |
 | `DB_PATH` | `server/data/test01.db` | SQLite database file. It's created, and its schema updated, on startup. |
 | `MIN_APP_VERSION` | `0.0.0` | Apps reporting an older version get `426 UPGRADE_REQUIRED` (see below). |
+| `VALKEY_URL` | unset | Valkey for shared state such as rate-limit counters, e.g. `redis://127.0.0.1:6379/0`. The last number picks the Valkey database, so environments sharing a Valkey server can use different ones. Unset: counters in process memory, for one process only. See [features/002-rate-limiting.md](features/002-rate-limiting.md#configuration). |
+| `TRUST_PROXY` | unset (off) | Set only behind a reverse proxy or load balancer: a comma-separated list of the proxy IPs or CIDRs, or `true` for any proxy. The client address for rate limiting is then read from `X-Forwarded-For`. Clients that connect directly could fake that header, so leave it unset otherwise. |
 
 `npm run dev` and `npm start` load `server/.env` if it exists (see `server/.env.example`). Variables set in the shell take precedence, so one checkout can run several servers.
 

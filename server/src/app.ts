@@ -10,6 +10,16 @@ import {
   newSessionToken,
   verifyPassword,
 } from './crypto.ts';
+import {
+  clientKey,
+  DEFAULT_LIMITS,
+  emailKey,
+  MemoryRateLimitStore,
+  RateLimiter,
+  waitText,
+  type Limits,
+  type RateLimitStore,
+} from './ratelimit.ts';
 
 export const SESSION_TTL_DAYS = 30;
 export const PASSWORD_MIN = 8;
@@ -50,12 +60,23 @@ class ApiError extends Error {
   statusCode: number;
   code: string;
   field?: string;
+  headers?: Record<string, string>;
   constructor(statusCode: number, code: string, message: string, field?: string) {
     super(message);
     this.statusCode = statusCode;
     this.code = code;
     this.field = field;
   }
+}
+
+function rateLimited(resetMs: number): ApiError {
+  const err = new ApiError(
+    429,
+    'RATE_LIMITED',
+    `Too many attempts. Please wait ${waitText(resetMs)} and try again.`,
+  );
+  err.headers = { 'retry-after': String(Math.max(1, Math.ceil(resetMs / 1000))) };
+  return err;
 }
 
 function toPublic(u: UserRow): PublicUser {
@@ -121,15 +142,39 @@ function bearerToken(req: FastifyRequest): string | undefined {
   return h.slice('Bearer '.length).trim() || undefined;
 }
 
-export function buildApp(opts: { dbPath: string; logger?: boolean; minAppVersion?: string }) {
+export type AppOptions = {
+  dbPath: string;
+  logger?: boolean;
+  minAppVersion?: string;
+  /** Where rate-limit counters live. Defaults to this process's memory. */
+  rateLimitStore?: RateLimitStore;
+  /** Overrides for individual limits, mainly for tests. */
+  limits?: Partial<Limits>;
+  /**
+   * Which proxies to trust for the client address in `X-Forwarded-For`, passed to Fastify's
+   * `trustProxy`. Leave it off unless the server sits behind a proxy you control: otherwise
+   * clients could set the header themselves and dodge per-client limits.
+   */
+  trustProxy?: boolean | string;
+};
+
+export function buildApp(opts: AppOptions) {
   const minAppVersion = opts.minAppVersion ?? '0.0.0';
+  const limits: Limits = { ...DEFAULT_LIMITS, ...opts.limits };
   const db = openDb(opts.dbPath);
-  const app = Fastify({ logger: opts.logger ?? false });
+  const app = Fastify({ logger: opts.logger ?? false, trustProxy: opts.trustProxy ?? false });
+  const limiter = new RateLimiter(opts.rateLimitStore ?? new MemoryRateLimitStore(), (err) =>
+    app.log.error({ err }, 'rate limit store failed; allowing the request'),
+  );
   app.register(cors, { origin: true });
-  app.addHook('onClose', async () => db.close());
+  app.addHook('onClose', async () => {
+    db.close();
+    await limiter.close();
+  });
 
   app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
     if (err instanceof ApiError) {
+      if (err.headers) reply.headers(err.headers);
       return reply.status(err.statusCode).send({
         error: { code: err.code, message: err.message, ...(err.field && { field: err.field }) },
       });
@@ -186,6 +231,9 @@ export function buildApp(opts: { dbPath: string; logger?: boolean; minAppVersion
   }));
 
   app.post(`${API}/auth/signup`, async (req, reply: FastifyReply) => {
+    const wait = await limiter.hit(`rl:signup:client:${clientKey(req.ip)}`, limits.signupPerClient);
+    if (wait !== undefined) throw rateLimited(wait);
+
     const email = normalizeEmail(str(req.body, 'email'));
     const password = str(req.body, 'password');
     const displayName = str(req.body, 'displayName').trim();
@@ -218,14 +266,28 @@ export function buildApp(opts: { dbPath: string; logger?: boolean; minAppVersion
   });
 
   app.post(`${API}/auth/login`, async (req) => {
+    const client = clientKey(req.ip);
+    let wait = await limiter.hit(`rl:login:client:${client}`, limits.loginPerClient);
+    if (wait !== undefined) throw rateLimited(wait);
+
     const email = normalizeEmail(str(req.body, 'email'));
     const password = str(req.body, 'password');
+    // Each attempt is counted *before* the password is checked, in one atomic step. Counting
+    // only after the (slow) check would let a burst of parallel guesses all get past the limit
+    // before any of them was counted. A blocked request is refused even with the right
+    // password, otherwise the response would reveal which guess was right.
+    const failuresKey = `rl:login:fail:${client}:${emailKey(email)}`;
+    wait = await limiter.hit(failuresKey, limits.loginFailuresPerClientEmail);
+    if (wait !== undefined) throw rateLimited(wait);
+
     const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as
       | UserRow
       | undefined;
     const ok = await verifyPassword(password, user?.password_hash ?? (await getDummyHash()));
-    if (!user || !ok)
-      throw new ApiError(401, 'INVALID_CREDENTIALS', 'Incorrect email or password.');
+    // A failure leaves its count in place.
+    if (!user || !ok) throw new ApiError(401, 'INVALID_CREDENTIALS', 'Incorrect email or password.');
+    // A success clears the count, including its own.
+    await limiter.reset(failuresKey);
     return { token: createSession(db, user.id), user: toPublic(user) };
   });
 

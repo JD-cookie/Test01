@@ -33,6 +33,14 @@ npm run dev        # http://0.0.0.0:3000, restarts when files change
 npm test           # API tests
 ```
 
+The tests for the Valkey rate-limit store run only when `VALKEY_URL` is set. To run them, start Valkey with podman first:
+
+```bash
+podman run -d --rm --name test01-valkey -p 127.0.0.1:6379:6379 docker.io/valkey/valkey:9-alpine
+VALKEY_URL=redis://127.0.0.1:6379/0 npm test
+podman stop test01-valkey
+```
+
 The data lives in `server/data/test01.db`. To start over with no accounts, delete that file.
 
 ## Run the app on your phone (development)
