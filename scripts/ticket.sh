@@ -30,6 +30,10 @@ set -eu
 
 backlog=docs/backlog/README.md
 
+# Paths here are relative to the repo root, so run from there wherever the script was called from.
+root=$(git rev-parse --show-toplevel) || { echo "ticket: not inside a git checkout" >&2; exit 2; }
+cd "$root"
+
 die() { code=$1; shift; echo "ticket: $*" >&2; exit "$code"; }
 
 # Prints "<NNN-slug> <status>" for each numbered row of main's backlog.

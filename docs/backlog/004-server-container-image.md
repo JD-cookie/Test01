@@ -44,18 +44,18 @@ Package the API server as an OCI container image, so it runs the same way on any
 
   The job's permissions stay read-only.
 - **Publishing:** a new workflow, `.github/workflows/server-image.yml`.
-  - **Trigger:** `release: types: [published]` for releases whose tag starts with `server-v`. release-please publishes each GitHub Release with the App token, and unlike `GITHUB_TOKEN` events, those trigger workflows. There's also a `workflow_dispatch` with the tag as an input, so an existing release such as `server-v0.2.0` can be published by hand. Pass that input to scripts only through `env:`.
-  - **Only real releases are published.** Before building, the job checks that the release exists and was **created by the release App**: its `author.login` must equal the App's bot login. That login is `<app slug>[bot]`, and for this repo's App it's `test01-release-please[bot]`, confirmed from the `server-v0.2.0` release. Keep it in a single `env:` value at the top of the workflow, with a comment, and add a note to devops.md's App setup steps: if the App is ever renamed or replaced, update that value. For manual runs, it looks the release up by tag with the read-only token. Otherwise it fails. Someone with write access can create a tag or a release by hand, but not one authored by the App, because the App's key is only available on `main` (the `release` environment).
+  - **Trigger:** `release: types: [published]` for releases whose tag starts with `server-v`. release-please publishes each GitHub Release with the App token, and unlike `GITHUB_TOKEN` events, those trigger workflows. **No `workflow_dispatch`.** A manual run can be started from any branch and runs that branch's copy of the workflow, so someone could remove the checks and still get `packages: write`. A release event runs the workflow file from the release's tag, which only the App can create. The cost: `server-v0.2.0` isn't published, and the first image is the next server release.
+  - **Only real releases are published.** Before building, the job checks that the release exists and was **created by the release App**: its `author.login` must equal the App's bot login. That login is `<app slug>[bot]`, and for this repo's App it's `test01-release-please[bot]`, confirmed from the `server-v0.2.0` release. Keep it in a single `env:` value at the top of the workflow, with a comment, and add a note to devops.md's App setup steps: if the App is ever renamed or replaced, update that value. Otherwise it fails. Someone with write access can create a tag or a release by hand, but not one authored by the App, because the App's key is only available on `main` (the `release` environment).
   - **Prerequisite:** a tag ruleset, created by the user (see "Decisions" below and devops.md).
   - **Version check:** it checks out the release's tag, then checks that the tag's version matches `server/package.json` at that commit. It fails if they differ.
-  - **Push:** it builds the image as above, then pushes `ghcr.io/jd-cookie/test01-server:<X.Y.Z>` and `:latest`. Only this job gets `packages: write`. It logs in with its `GITHUB_TOKEN`, passed on stdin, never on the command line.
+  - **Push:** it builds the image as above, then pushes `ghcr.io/jd-cookie/test01-server:<X.Y.Z>`. Only this job gets `packages: write`. It logs in with its `GITHUB_TOKEN`, passed on stdin, never on the command line.
   - Actions are pinned by SHA, as usual.
 
 ## Decisions made for this ticket
 
 Change these before claiming if you disagree:
 - **The GHCR package is public.** The repo is public, and Kubernetes can then pull without a pull secret. After the first publish, the user sets the package's visibility to public in GitHub, because new packages start private. This step goes in devops.md.
-- **The tags are `X.Y.Z` and `latest`.** No `X.Y` or `X` tags yet.
+- **The only tag is `X.Y.Z`. There's no `latest`.** Deployments, and later GitOps, name an exact version. A moving `latest` tag would also need a guard so that an older release never moves it backwards. No `X.Y` or `X` tags either.
 - **Release tags are protected, and that's a prerequisite.** Before the publish workflow is merged, the user creates a **tag ruleset** (Settings → Rules → Rulesets → New tag ruleset):
   - **Target:** `server-v*` and `app-v*`.
   - **Rules:** restrict creations, updates, and deletions.
@@ -69,6 +69,7 @@ Change these before claiming if you disagree:
 - The process runs as the non-root `node` user, and only `/data` needs to be writable.
 - `packages: write` is granted to the publish job only. The PR job can't push.
 - Publishing needs a release authored by the release App, on a tag that only the App can create (the ruleset). The version check is a separate consistency check, not a security control.
+- **Known limit:** anyone with **write access** can still push an image. They can push a branch whose workflow asks for `packages: write` and pushes to GHCR, because the repo's read-only default is a default, not a ceiling. The checks above stop accidents and keep releases honest, but they can't stop a writer. Today the only writer is the owner. Proving where an image came from, rather than trusting who could push it, takes signed build provenance (`actions/attest-build-provenance`, checked with `gh attestation verify`) together with a cluster that only runs verified images. Add that to the backlog as a follow-up to this ticket.
 
 ## Implementation map
 
@@ -90,7 +91,7 @@ Change these before claiming if you disagree:
 4. The process in the container runs as `node`, not root (`podman exec … id -u` ≠ 0).
 5. The image contains no `test/`, `.env`, `data/`, or dev dependencies such as `typescript`.
 6. On a PR, the `server-image` job builds and smoke-tests the image and pushes nothing.
-7. A release published by release-please, or a manual run against `server-v0.2.0`, publishes `ghcr.io/jd-cookie/test01-server:<version>` and `:latest`. The image's labels have the right source, version, and revision.
+7. A release published by release-please publishes `ghcr.io/jd-cookie/test01-server:<version>` and no other tag. The image's labels have the right source, version, and revision.
 8. A release not created by the release App, or one whose tag version doesn't match `server/package.json`, fails the publish job, and nothing is pushed.
 9. With the ruleset in place, pushing a `server-v*` tag by hand (`git push origin <commit>:refs/tags/server-v9.9.9`) is rejected.
 10. actionlint is clean, `npm run check` passes, and devops.md describes all of the above, including the ruleset steps.
