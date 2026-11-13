@@ -16,7 +16,7 @@ None. Expired sessions already behave as logged out.
 
 ## API
 
-No changes. Rejecting an expired token doesn't depend on the sweep: a session with `expires_at` in the past gets `401 UNAUTHORIZED` whether or not its row has been deleted yet.
+No changes. Rejecting an expired token doesn't depend on the sweep: a session with `expires_at` in the past gets `401 UNAUTHENTICATED` ("Your session has expired. Please log in again.", see [001](../features/001-accounts.md)) whether or not its row has been deleted yet.
 
 ## Processing
 
@@ -56,7 +56,7 @@ Append it as a new entry in `MIGRATIONS`, and never edit migration 1. The schema
 2. A session whose `expires_at` equals `now` is deleted. Its token is already rejected at that moment, because a session is valid only while `expires_at > now`.
 3. A sweep with nothing expired deletes nothing and returns 0.
 4. The server sweeps at startup: expired rows in the database before `buildApp` are gone once the app is ready.
-5. A token whose session expired gets `401` both before and after the sweep.
+5. A token whose session expired gets `401 UNAUTHENTICATED` both before and after the sweep.
 6. `app.close()` stops the timer: the test process exits without hanging.
 7. Opening an existing version-1 database applies migration 2. `PRAGMA user_version` becomes 2, and the index exists.
 8. `npm run check` passes, and the 001 doc no longer lists this as a gap.

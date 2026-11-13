@@ -45,8 +45,10 @@ tickets() {
 }
 
 list() {
-  git fetch -q origin main
-  branches=$(git ls-remote --heads origin | sed 's|.*refs/heads/||')
+  git fetch -q origin main || die 4 "couldn't reach origin"
+  # Checked before it's filtered: an empty list from a failed lookup would show claimed tickets as free.
+  heads=$(git ls-remote --heads origin) || die 4 "couldn't reach origin to list the claimed tickets"
+  branches=$(printf '%s\n' "$heads" | sed 's|.*refs/heads/||')
   tickets | while read -r slug status; do
     [ "$status" = ready ] || continue
     if printf '%s\n' "$branches" | grep -qx -- "$slug"; then
@@ -72,6 +74,14 @@ remote_head() {
   done
 }
 
+# Makes the local branch $1 track origin's. Only a convenience: the claim is settled by then,
+# so a failure here warns and doesn't change the outcome.
+track() {
+  if ! { git fetch -q origin "$1" && git branch -q --set-upstream-to="origin/$1" "$1"; }; then
+    echo "ticket: the claim is yours, but setting the branch's upstream failed. Later, run: git push -u origin $1" >&2
+  fi
+}
+
 claim() {
   ticket=$1
   agent=$2
@@ -82,7 +92,7 @@ claim() {
     die 2 "commit, stash, or remove your changes first, including untracked files (see git status)"
   fi
 
-  git fetch -q origin main
+  git fetch -q origin main || die 4 "couldn't reach origin"
   status=$(tickets | awk -v t="$ticket" '$1 == t { $1 = ""; sub(/^ /, ""); print }')
   [ -n "$status" ] || die 2 "$ticket isn't a numbered ticket in $backlog on origin/main"
   [ "$status" = ready ] || die 2 "$ticket has status '$status' on origin/main, not 'ready'"
@@ -94,14 +104,24 @@ claim() {
 
   id=$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')
   when=$(date -u +%Y-%m-%dT%H:%MZ)
-  start=$(git symbolic-ref --quiet --short HEAD || git rev-parse HEAD)
+  if start=$(git symbolic-ref --quiet --short HEAD); then
+    back() { git switch -q "$start"; }
+  else
+    start=$(git rev-parse HEAD)
+    back() { git switch -q --detach "$start"; }
+  fi
   git switch -q --no-track -c "$ticket" origin/main || die 2 "couldn't create the branch $ticket"
 
   # Until the push, nothing exists outside this checkout. On any failure, put the checkout back
   # as it was. The tree was clean before, so the hard reset only drops this script's own edit.
-  abandon() { git reset -q --hard; git switch -q "$start"; git branch -q -D "$ticket"; }
+  abandon() { git reset -q --hard; back; git branch -q -D "$ticket"; }
 
-  sed -i "/](${ticket}\.md)/s/| ready |/| in progress (claim $id, $agent, $when) |/" "$backlog"
+  # Edit the status cell (column 5) of this ticket's row, with the same spacing rules as tickets().
+  tmp=$(mktemp)
+  awk -F'|' -v OFS='|' -v link="](${ticket}.md)" -v claim="in progress (claim $id, $agent, $when)" '
+    index($3, link) { s = $5; gsub(/^ +| +$/, "", s); if (s == "ready") $5 = " " claim " " }
+    { print }' "$backlog" >"$tmp" && cat "$tmp" >"$backlog"
+  rm -f "$tmp"
   if git diff --quiet; then
     abandon
     die 2 "couldn't find the status cell of $ticket in $backlog"
@@ -121,9 +141,7 @@ Claimed-By: $agent"; }; then
     die 4 "couldn't reach origin to check the claim. Your local branch $ticket is kept; run: scripts/ticket.sh verify $ticket"
   fi
   if [ "$remote" = "$mine" ]; then
-    if [ "$pushed" = no ]; then
-      git fetch -q origin "$ticket" && git branch -q --set-upstream-to="origin/$ticket"
-    fi
+    [ "$pushed" = yes ] || track "$ticket"
     echo "claimed $ticket (claim $id) on branch $ticket"
     return 0
   fi
@@ -142,6 +160,7 @@ verify() {
   remote=$(remote_head "$ticket") || die 4 "couldn't reach origin"
   if [ "$remote" = "$mine" ]; then
     echo "claimed: origin's $ticket is your claim commit"
+    track "$ticket"
   elif [ -z "$remote" ]; then
     die 4 "origin has no branch $ticket, so the claim didn't happen. Delete the local branch (git branch -D $ticket) and claim again."
   else
