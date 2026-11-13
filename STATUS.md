@@ -4,7 +4,7 @@ Last updated 2026-11-13. This is a handoff note between working sessions. The sy
 
 ## Where things are
 
-- **Qodo hackathon** ("Build a Software Factory in 30 Days", 2026-11-02 to 2026-12-02): the user is entering with this project. There are 23 weekday challenges, and missed ones can be caught up before the final cutoff (midnight Pacific at the end of Dec 2). Each challenge gets a focused branch and PR with a Qodo review. The user posts each submission in that challenge's Discussion. Rules: https://hackathon.qodo.ai/rules/. Submission template: https://github.com/orgs/qodo-hackathon/discussions/1. Progress so far: the Day 1 capability (rate limiting, feature 002) is in PR #1 (https://github.com/JD-cookie/Test01/pull/1), from branch `002-rate-limiting`. PR #2 (husky pre-commit checks) and PR #3 (CI, Conventional Commits, release-please) are merged. Still needed for Day 1 (https://github.com/orgs/qodo-hackathon/discussions/2): the user's intro comment and update in the Discussion.
+- **Qodo hackathon** ("Build a Software Factory in 30 Days", 2026-11-02 to 2026-12-02): the user is entering with this project. There are 23 weekday challenges, and missed ones can be caught up before the final cutoff (midnight Pacific at the end of Dec 2). Each challenge gets a focused branch and PR with a Qodo review. The user posts each submission in that challenge's Discussion. Rules: https://hackathon.qodo.ai/rules/. Submission template: https://github.com/orgs/qodo-hackathon/discussions/1. Progress so far: Day 1 (rate limiting, feature 002) merged in PR #1 (https://github.com/JD-cookie/Test01/pull/1). Day 2 (write AGENTS.md with 3–5 rules, have Qodo import them as Review Standards, and nominate one rule in the Day 2 Discussion) is on branch `agents-md`. The suggested nominee is "Count Before You Check", from Qodo's Day 1 finding. PR #2 (husky pre-commit checks) and PR #3 (CI, Conventional Commits, release-please) are merged. Still needed for Day 1 (https://github.com/orgs/qodo-hackathon/discussions/2): the user's intro comment and update in the Discussion.
 
 - **Purpose:** a learning project, for exploring technology the user hasn't worked with before: phone apps, GitOps, OpenTelemetry, and more. Build things the real way, and explain new technology as it's introduced.
 
@@ -16,7 +16,7 @@ Last updated 2026-11-13. This is a handoff note between working sessions. The sy
   - Backlog: `docs/backlog/README.md` lists work not built yet, with design docs alongside it.
 - **Done:**
   - Feature 001, accounts: sign up, log in, stay logged in, log out. Spec in `docs/features/001-accounts.md`.
-  - Feature 002, rate limiting of login and signup: limits per client (an IPv4 address or an IPv6 /64) and per client+email for failed logins. Counters are in Valkey when `VALKEY_URL` is set, otherwise in memory, and the limiter fails open. `TRUST_PROXY` is supported. Spec in `docs/features/002-rate-limiting.md`. Not yet merged: PR #1.
+  - Feature 002, rate limiting of login and signup: limits per client (an IPv4 address or an IPv6 /64) and per client+email for failed logins. Counters are in Valkey when `VALKEY_URL` is set, otherwise in memory, and the limiter fails open. `TRUST_PROXY` is supported. Spec in `docs/features/002-rate-limiting.md`. Merged in PR #1, released as server 0.2.0.
   - Environment support: dev, staging, and production app variants, the `/api/v1` prefix, the `X-App-Version` header with a `MIN_APP_VERSION` check that shows the "Update required" screen, and `/api/v1/meta`. Spec in `docs/devops.md`.
   - Device setup guides: `docs/dev-setup-phone.md` and `docs/dev-setup-android-studio-ubuntu.md`.
 
@@ -37,20 +37,19 @@ Last updated 2026-11-13. This is a handoff note between working sessions. The sy
 
 ## Open items and next steps
 
-0. PRs: #2 (husky) merged 2026-11-13 as `135e219`, and #3 (CI, Conventional Commits, release-please) merged as `6a4ca3e`. Both squash commits used the PR title, so the merge settings work. #1 (rate limiting, branch `002-rate-limiting`) had main merged into it and is the only open PR.
-1. Release App: working. The first Release Please run on `main` (after #3) got an App token, then found no `feat`/`fix` commits and opened no PR, as expected. Merging #1 (`feat(server)`) should open `chore(release): release main` with server 0.2.0. Check that PR's title, changelog, and version bumps. release-please logs a warning, "pullRequestTitlePattern miss the part of '${scope}'". It's harmless unless it stops release-please finding its own PR on the next run. App Client ID `Iv23liyEkVVtGp2Shoka` (not secret). Claude's token can't see Actions secrets, variables, or admin settings (403, as intended).
+0. Merged 2026-11-13, all squash-merged with the PR title: #2 (husky), #3 (CI, Conventional Commits, release-please), #1 (rate limiting), and #4 (release-please's release PR). No PRs are open.
+1. Release process: works end to end. Merging #1 made the App open #4, which bumped the server to 0.2.0 (`package.json`, the lockfile, the manifest, and `server/CHANGELOG.md`) and left the app at 0.1.0. CI ran on it. Merging #4 created the tag `server-v0.2.0` and the GitHub Release "server: v0.2.0". Qodo is set not to review bot PRs, so release PRs get no Qodo review. The 0.2.0 compare link 404s because there's no `server-v0.1.0` tag. Claude offered to tag `237065b` as `server-v0.1.0`/`app-v0.1.0`; no answer yet. App Client ID `Iv23liyEkVVtGp2Shoka` (not secret).
 2. On the phone, confirm that staying logged in (kill and reopen the app) and logging out both work.
 3. Everything else (deciding what the app does beyond accounts, password reset, production hosting, and so on) is in `docs/backlog/README.md`. Pick from there.
 
 ## Working agreements and gotchas
 
-- **New requests and known gaps go in `docs/backlog/README.md`**, not in this file. A design doc, if there is one, sits next to it as `docs/backlog/<slug>.md`. When it's built, it moves to `docs/features/NNN-<slug>.md`. The steps are in the backlog README.
-- **Commit messages / PR titles: Conventional Commits** (`feat(server): …`, `fix(app): …`, `docs: …`), enforced by a `commit-msg` hook (commitlint) and by CI's `pr-title` job. PRs get squash-merged with the PR title as the commit. Versions and `server/CHANGELOG.md` and `app/CHANGELOG.md` come from release-please. Never bump versions or edit changelogs by hand. See `docs/devops.md` → Versioning and releases.
-- **CI** (`.github/workflows/ci.yml`): server check (with a Valkey service), app check, and PR title. Workflow rules: read-only token by default, actions pinned to full SHAs, no `pull_request_target`. Run actionlint via podman before pushing workflow changes.
-- **Git hooks:** husky (repo-root `package.json`) runs a `pre-commit` hook that runs `npm run check` in `server/` and/or `app/`, for whichever has staged changes. Run `npm install` at the root after cloning to turn it on. Don't bypass it with `--no-verify` unless the user asks.
-- **Every feature gets a doc** in `docs/features/NNN-*.md`, written in the same change that builds it. It must hold enough detail to reimplement the system from the docs alone. See `docs/README.md` for what each doc should contain. Operational changes go in `docs/devops.md`.
-- Use `npx expo install <pkg>` for app packages. `app/.npmrc` sets `legacy-peer-deps=true` to get past a `react-dom` 19.3.1 / `react` 19.3.0 peer conflict in SDK 58.
-- `app/AGENTS.md`, from the Expo template, says Expo changes often: check the versioned docs at docs.expo.dev rather than relying on memory.
+**The project rules, setup, and verify commands are in [`AGENTS.md`](AGENTS.md)** (`CLAUDE.md` imports it): Count Before You Check, No Shared State in Process Memory, Every Feature Ships With Its Doc, Release Tooling Owns Versions and Changelogs, and Least-Privilege Workflows. Don't repeat them here. Below are only the notes about this machine and how the user likes to work.
+
+- New requests and known gaps go in `docs/backlog/README.md`, not in this file.
+- Don't offer to commit every small change: the user batches commits. PR work (branch, commit, push, PR) is fine when the user asked for the work.
+- After creating or updating a PR, check it about 10 minutes later for reviews, comments, and checks, then 30 minutes after that if nothing changed. Qodo doesn't review bot PRs, such as release-please's.
+- `gh` 2.46: `gh pr edit` fails (a Projects classic error). Update PRs with `gh api -X PATCH repos/JD-cookie/Test01/pulls/N`.
+- `app/.npmrc` sets `legacy-peer-deps=true` to get past a `react-dom` 19.3.1 / `react` 19.3.0 peer conflict in SDK 58.
 - **Containers: podman, not Docker** (podman 5.7 and buildah are installed). The user has done manual Linux server deploys and some GitHub Actions CI, but has little experience with CD, GitOps, or Kubernetes. Explain those from the basics.
-- **Data stores:** SQLite is for development and tests only. Staging and production will use a database server, not chosen yet, plus Valkey for shared state. Keep SQL portable, and never keep shared state in process memory, except as a fallback for development and tests, as the rate limiter does. See `docs/devops.md` → Environments.
 - The dev server has no GUI, Java, Android SDK, Docker, or Kubernetes tools. Builds go through EAS in the cloud. Devices connect over the LAN at `10.0.0.78` or through an SSH tunnel with `adb reverse`.
