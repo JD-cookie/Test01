@@ -85,8 +85,16 @@ track() {
 claim() {
   ticket=$1
   agent=$2
-  printf '%s' "$ticket" | grep -Eqx '[0-9]{3}-[a-z0-9-]+' || die 2 "not a ticket name: $ticket (expected NNN-slug)"
-  printf '%s' "$agent" | grep -Eqx '[A-Za-z0-9._@-]+' || die 2 "agent name may only use letters, digits, and . _ @ -"
+  # Whole-value checks (grep -x would accept a multi-line value if any one line matched), because
+  # both values end up in the backlog table.
+  case $ticket in
+    [0-9][0-9][0-9]-*[!a-z0-9-]* | [0-9][0-9][0-9]-) die 2 "not a ticket name: $ticket (expected NNN-slug)" ;;
+    [0-9][0-9][0-9]-*) ;;
+    *) die 2 "not a ticket name: $ticket (expected NNN-slug)" ;;
+  esac
+  case $agent in
+    '' | *[!A-Za-z0-9._@-]*) die 2 "agent name may only use letters, digits, and . _ @ -" ;;
+  esac
   # Untracked files count too: they would follow the agent onto the ticket branch.
   if [ -n "$(git status --porcelain)" ]; then
     die 2 "commit, stash, or remove your changes first, including untracked files (see git status)"
@@ -117,10 +125,17 @@ claim() {
   abandon() { git reset -q --hard; back; git branch -q -D "$ticket"; }
 
   # Edit the status cell (column 5) of this ticket's row, with the same spacing rules as tickets().
-  tmp=$(mktemp)
-  awk -F'|' -v OFS='|' -v link="](${ticket}.md)" -v claim="in progress (claim $id, $agent, $when)" '
-    index($3, link) { s = $5; gsub(/^ +| +$/, "", s); if (s == "ready") $5 = " " claim " " }
-    { print }' "$backlog" >"$tmp" && cat "$tmp" >"$backlog"
+  if ! tmp=$(mktemp); then
+    abandon
+    die 2 "couldn't create a temporary file"
+  fi
+  if ! { awk -F'|' -v OFS='|' -v link="](${ticket}.md)" -v claim="in progress (claim $id, $agent, $when)" '
+      index($3, link) { s = $5; gsub(/^ +| +$/, "", s); if (s == "ready") $5 = " " claim " " }
+      { print }' "$backlog" >"$tmp" && cat "$tmp" >"$backlog"; }; then
+    rm -f "$tmp"
+    abandon
+    die 2 "couldn't write the claim to $backlog"
+  fi
   rm -f "$tmp"
   if git diff --quiet; then
     abandon
