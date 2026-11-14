@@ -28,7 +28,7 @@ What the exit codes mean:
 - **0:** the ticket is yours, and you're on its branch.
 - **3:** with `next`, no free ticket is left: stop and tell the user. With a named ticket, another agent got there first: tell the user, or run `claim next`. Never delete or overwrite another agent's branch, and never push to it with `--force`.
 - **2:** the ticket isn't `ready`, your checkout has changes (untracked files count), a local branch is in the way, or the claim commit failed. Your checkout is left as it was. Fix the cause or ask the user.
-- **4:** `origin` couldn't be reached, so the outcome isn't known. If the script kept your local branch, run `scripts/ticket.sh verify NNN-slug` once `origin` is reachable. It returns 0 if the claim is yours and 3 if it isn't. Otherwise, try the claim again.
+- **4:** `origin` couldn't be reached, so the outcome isn't known. If the script kept your local branch, run `scripts/ticket.sh verify NNN-slug` once `origin` is reachable. It returns 0 if the claim is yours, 3 if it isn't (the message says whether to claim again), and 4 if `origin` still can't be reached. If there is no local branch, try the claim again.
 - **5:** the claim is yours, but the user withdrew or changed the ticket on `main` while you claimed it. Don't build it. Tell the user, and leave the branch: it still holds the claim, and only the user releases it.
 
 ## 2. Build it

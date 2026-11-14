@@ -46,9 +46,12 @@ cd "$root"
 
 die() { code=$1; shift; echo "ticket: $*" >&2; exit "$code"; }
 
-# Prints "<NNN-slug> <status>" for each numbered row of main's backlog.
+# Prints "<NNN-slug> <status>" for each numbered row of main's backlog. Callers capture its output
+# with $(…) and check its exit code: piped straight into another command, a failed read would look
+# like an empty backlog.
 tickets() {
-  git show "origin/main:$backlog" | awk -F'|' '
+  text=$(git show "origin/main:$backlog") || die 2 "couldn't read $backlog on origin/main"
+  printf '%s\n' "$text" | awk -F'|' '
     $2 ~ /^ *[0-9][0-9][0-9] *$/ {
       if (match($3, /\]\([0-9][0-9][0-9]-[a-z0-9-]+\.md\)/)) {
         slug = substr($3, RSTART + 2, RLENGTH - 6)
@@ -60,7 +63,8 @@ tickets() {
 
 # Prints the status of ticket $1 on origin/main, or nothing if it has no row there.
 ticket_status() {
-  tickets | awk -v t="$1" '$1 == t { $1 = ""; sub(/^ /, ""); print }'
+  rows=$(tickets) || exit $?
+  printf '%s\n' "$rows" | awk -v t="$1" '$1 == t { $1 = ""; sub(/^ /, ""); print }'
 }
 
 # After a won claim: is the ticket still ready on main, with the design doc it was claimed with?
@@ -82,7 +86,8 @@ ready_tickets() {
   # Checked before it's filtered: an empty list from a failed lookup would show claimed tickets as free.
   heads=$(git ls-remote --heads origin) || die 4 "couldn't reach origin to list the claimed tickets"
   branches=$(printf '%s\n' "$heads" | sed 's|.*refs/heads/||')
-  tickets | while read -r slug status; do
+  rows=$(tickets) || exit $?
+  printf '%s\n' "$rows" | while read -r slug status; do
     [ "$status" = ready ] || continue
     if ! git cat-file -e "origin/main:docs/backlog/$slug.md" 2>/dev/null; then
       echo "$slug  not claimable: docs/backlog/$slug.md is missing on main"
@@ -242,7 +247,7 @@ verify() {
     still_ready "$ticket" "$mine"
     echo "claimed: origin's $ticket is your claim commit"
   elif [ -z "$remote" ]; then
-    die 4 "origin has no branch $ticket, so the claim didn't happen. Delete the local branch (git branch -D $ticket) and claim again."
+    die 3 "origin has no branch $ticket, so the claim didn't happen. Delete the local branch (git branch -D $ticket) and claim again."
   else
     die 3 "origin's $ticket is another agent's commit: the ticket isn't yours. Delete the local branch: git branch -D $ticket"
   fi

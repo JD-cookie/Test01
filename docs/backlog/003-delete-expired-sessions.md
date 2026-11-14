@@ -39,6 +39,12 @@ CREATE INDEX sessions_expires_at ON sessions(expires_at);
 
 Append it as a new entry in `MIGRATIONS`, and never edit migration 1. The schema stays portable: a plain index on a text column.
 
+This is the first migration added to a database that already exists, so make the runner in `openDb` safe for two processes starting at once on the same file, for example a dev server restarting while another is still up. Today each process reads `user_version` before its transaction, so both can try to create the index, and the second fails. Instead, for each migration:
+1. Start the transaction with `BEGIN IMMEDIATE`, which takes SQLite's write lock at the start, so a second process waits instead of failing. Also set `PRAGMA busy_timeout` (5 seconds) when the database opens, so the wait doesn't fail at once.
+2. Read `user_version` again inside the transaction, and skip the migration if another process already applied it.
+
+This only covers SQLite. The server still supports one instance per database ([devops.md](../devops.md#environments)). Running migrations once per deploy, instead of at each instance's startup, belongs to the staging and production database item in the backlog.
+
 ## Security and configuration
 
 - No new settings. The interval (1 hour) is a constant. Tests call the sweep function directly instead of waiting for the timer.
@@ -46,7 +52,7 @@ Append it as a new entry in `MIGRATIONS`, and never edit migration 1. The schema
 
 ## Implementation map
 
-- `server/src/db.ts`: migration 2 (the index).
+- `server/src/db.ts`: migration 2 (the index), and the runner's `BEGIN IMMEDIATE` with the `user_version` recheck and the busy timeout.
 - `server/src/app.ts` (or a small `server/src/sessions.ts`): `deleteExpiredSessions(db, now): number`, which returns the number of rows deleted. Plus the startup sweep, the hourly timer, and clearing it in the existing `onClose` hook.
 - `server/test/`: tests for the acceptance checks below.
 
@@ -59,4 +65,5 @@ Append it as a new entry in `MIGRATIONS`, and never edit migration 1. The schema
 5. A token whose session expired gets `401 UNAUTHENTICATED` both before and after the sweep.
 6. `app.close()` stops the timer: the test process exits without hanging.
 7. Opening an existing version-1 database applies migration 2. `PRAGMA user_version` becomes 2, and the index exists.
-8. `npm run check` passes, and the 001 doc no longer lists this as a gap.
+8. Two processes that run `openDb` at the same moment on the same version-1 database file both succeed (the test starts them as child processes). The database ends at version 2 with the index.
+9. `npm run check` passes, and the 001 doc no longer lists this as a gap. devops.md's migrations section describes the lock and the recheck.
