@@ -11,7 +11,9 @@ Instructions for AI agents and reviewers working in this repository. People are 
 | `app/` | The mobile app: Expo SDK 58, Expo Router, TypeScript. **Expo-specific instructions are in [`app/AGENTS.md`](app/AGENTS.md).** |
 | `server/` | The API: Fastify 5, `node:sqlite` in development and tests, optional Valkey for shared counters. TypeScript run directly by Node (type stripping), so only erasable syntax. |
 | `docs/` | The system spec, one doc per feature. Start at [`docs/README.md`](docs/README.md). Environments, config, CI, and releases: [`docs/devops.md`](docs/devops.md). |
-| `docs/backlog/README.md` | Work not built yet. New requests and known gaps go here. |
+| `docs/backlog/README.md` | The ticket system: work not built yet. New requests and known gaps go here. See [Backlog tickets](#backlog-tickets). |
+| `scripts/ticket.sh` | Lists the ready tickets and claims one. |
+| `.agents/skills/` | Agent skills, such as `next-ticket`. `.claude/skills` is a symlink to it. See [Skills](#skills). |
 | `.github/workflows/` | CI (`ci.yml`), the PR title check (`pr-title.yml`), and releases (`release-please.yml`). |
 | `STATUS.md` | A handoff note between working sessions: where the work stands. Not a rules file. |
 
@@ -65,7 +67,7 @@ Each rule says where it applies and why it exists. Reviewers should flag changes
 
 ### 3. Every Feature Ships With Its Doc
 
-**Rule:** a PR that adds or changes behavior updates the spec in the same PR: `docs/features/NNN-<slug>.md` for a feature, `docs/devops.md` for environments, config, CI, or releases. A new feature gets the next free number, and its branch is named after the doc (`002-rate-limiting`). The docs must hold enough detail to rebuild the system from them alone. When a feature built from the backlog is done, its row leaves `docs/backlog/README.md`.
+**Rule:** a PR that adds or changes behavior updates the spec in the same PR: `docs/features/NNN-<slug>.md` for a feature, `docs/devops.md` for environments, config, CI, or releases. A feature's number is given when its ticket is marked `ready` in the backlog, and its branch is named after the doc (`003-delete-expired-sessions`). The docs must hold enough detail to rebuild the system from them alone. When a feature built from the backlog is done, its row leaves `docs/backlog/README.md`.
 
 **Applies to:** every PR that touches `app/`, `server/`, or `.github/`. Docs-only, test-only, and release PRs are exempt.
 
@@ -92,6 +94,28 @@ Each rule says where it applies and why it exists. Reviewers should flag changes
 **Applies to:** `.github/workflows/`.
 
 **Why:** the repo is public, and workflows are where tokens and secrets are. A moved tag can swap in different code for an action. Text from a PR spliced into a script is shell injection. The release App's key in a `main`-only environment can't be read by a workflow pushed on another branch. These are the reasons release-please uses a GitHub App instead of turning on "Allow GitHub Actions to create and approve pull requests".
+
+## Backlog tickets
+
+Work comes from [`docs/backlog/README.md`](docs/backlog/README.md), which defines the statuses and the lifecycle of a ticket. Several agents may work at once, so:
+
+- **Only build a `ready` ticket.** Such a ticket has a number and a design doc, `docs/backlog/NNN-<slug>.md`, with acceptance checks. Only the user marks tickets `ready`.
+- **Claim it before starting:** run `scripts/ticket.sh claim NNN-<slug> <agent-name>`.
+  - The claim is the ticket's branch on `origin`, named `NNN-<slug>`. The script creates it with a unique claim commit, pushes it create-only, and checks that `origin` has that commit. Only one agent can win, and no merge is needed.
+  - Exit code 3 means another agent has the ticket. Take the next one from `scripts/ticket.sh list`.
+  - Never delete, overwrite, or force-push another agent's branch. Only the user releases a claim.
+- **One ticket per branch and PR.** The PR moves the design doc to `docs/features/` and fills in its "Delivery and review" section. It also deletes the ticket's row and adds the feature to `docs/README.md`.
+
+These steps are the `next-ticket` skill: [`.agents/skills/next-ticket/SKILL.md`](.agents/skills/next-ticket/SKILL.md). See [Skills](#skills) for where agents find it.
+
+## Skills
+
+A skill is a folder with a `SKILL.md`: a name, a description that tells the agent when to use it, and the steps. The format is the open [Agent Skills](https://agentskills.io) standard, so one copy works in every agent:
+
+- **`.agents/skills/<name>/SKILL.md`** is where skills live. Codex and opencode read this folder.
+- **`.claude/skills`** is a symlink to `.agents/skills`, because Claude Code reads only `.claude/skills`. opencode reads both and finds the same skill once.
+
+Add new skills under `.agents/skills/`, never as a real folder in `.claude/skills/`. An agent that reads neither folder can still follow a skill: it's plain Markdown.
 
 ## Working in this repo
 
