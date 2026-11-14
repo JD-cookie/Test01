@@ -2,7 +2,7 @@
 
 Feature and work requests that aren't built yet. This file is the project's ticket system: each item is one row, its history is this file's git history, and each ticket becomes one branch and one PR.
 
-**Agents: pick up work with the `next-ticket` skill, [`.claude/skills/next-ticket/SKILL.md`](../../.claude/skills/next-ticket/SKILL.md).** It uses [`scripts/ticket.sh`](../../scripts/ticket.sh) to list the ready tickets and to claim one. Agents other than Claude Code follow the same steps: see "Backlog tickets" in [`AGENTS.md`](../../AGENTS.md#backlog-tickets).
+**Agents: pick up work with the `next-ticket` skill, [`.agents/skills/next-ticket/SKILL.md`](../../.agents/skills/next-ticket/SKILL.md).** It uses [`scripts/ticket.sh`](../../scripts/ticket.sh) to list the ready tickets and to claim one. Claude Code, Codex, and opencode all find it as a skill. Any other agent follows the same file: see "Backlog tickets" in [`AGENTS.md`](../../AGENTS.md#backlog-tickets).
 
 ## Statuses
 

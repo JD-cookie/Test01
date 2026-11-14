@@ -13,6 +13,7 @@ Instructions for AI agents and reviewers working in this repository. People are 
 | `docs/` | The system spec, one doc per feature. Start at [`docs/README.md`](docs/README.md). Environments, config, CI, and releases: [`docs/devops.md`](docs/devops.md). |
 | `docs/backlog/README.md` | The ticket system: work not built yet. New requests and known gaps go here. See [Backlog tickets](#backlog-tickets). |
 | `scripts/ticket.sh` | Lists the ready tickets and claims one. |
+| `.agents/skills/` | Agent skills, such as `next-ticket`. `.claude/skills` is a symlink to it. See [Skills](#skills). |
 | `.github/workflows/` | CI (`ci.yml`), the PR title check (`pr-title.yml`), and releases (`release-please.yml`). |
 | `STATUS.md` | A handoff note between working sessions: where the work stands. Not a rules file. |
 
@@ -105,7 +106,16 @@ Work comes from [`docs/backlog/README.md`](docs/backlog/README.md), which define
   - Never delete, overwrite, or force-push another agent's branch. Only the user releases a claim.
 - **One ticket per branch and PR.** The PR moves the design doc to `docs/features/` and fills in its "Delivery and review" section. It also deletes the ticket's row and adds the feature to `docs/README.md`.
 
-Claude Code has these steps as the `next-ticket` skill: [`.claude/skills/next-ticket/SKILL.md`](.claude/skills/next-ticket/SKILL.md). Other agents should follow that file too.
+These steps are the `next-ticket` skill: [`.agents/skills/next-ticket/SKILL.md`](.agents/skills/next-ticket/SKILL.md). See [Skills](#skills) for where agents find it.
+
+## Skills
+
+A skill is a folder with a `SKILL.md`: a name, a description that tells the agent when to use it, and the steps. The format is the open [Agent Skills](https://agentskills.io) standard, so one copy works in every agent:
+
+- **`.agents/skills/<name>/SKILL.md`** is where skills live. Codex and opencode read this folder.
+- **`.claude/skills`** is a symlink to `.agents/skills`, because Claude Code reads only `.claude/skills`. opencode reads both and finds the same skill once.
+
+Add new skills under `.agents/skills/`, never as a real folder in `.claude/skills/`. An agent that reads neither folder can still follow a skill: it's plain Markdown.
 
 ## Working in this repo
 
