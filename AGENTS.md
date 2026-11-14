@@ -100,9 +100,9 @@ Each rule says where it applies and why it exists. Reviewers should flag changes
 Work comes from [`docs/backlog/README.md`](docs/backlog/README.md), which defines the statuses and the lifecycle of a ticket. Several agents may work at once, so:
 
 - **Only build a `ready` ticket.** Such a ticket has a number and a design doc, `docs/backlog/NNN-<slug>.md`, with acceptance checks. Only the user marks tickets `ready`.
-- **Claim it before starting:** run `scripts/ticket.sh claim NNN-<slug> <agent-name>`.
+- **Claim it before starting:** run `scripts/ticket.sh claim next <agent-name>`, which claims the first free ready ticket, or `claim NNN-<slug>` for a ticket the user named.
   - The claim is the ticket's branch on `origin`, named `NNN-<slug>`. The script creates it with a unique claim commit, pushes it create-only, and checks that `origin` has that commit. Only one agent can win, and no merge is needed.
-  - Exit code 3 means another agent has the ticket. Take the next one from `scripts/ticket.sh list`.
+  - If another agent wins a ticket first, `claim next` moves on to the next one. Exit code 3 means no free ticket is left.
   - Never delete, overwrite, or force-push another agent's branch. Only the user releases a claim.
 - **One ticket per branch and PR.** The PR moves the design doc to `docs/features/` and fills in its "Delivery and review" section. It also deletes the ticket's row and adds the feature to `docs/README.md`.
 

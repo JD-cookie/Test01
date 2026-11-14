@@ -2,6 +2,7 @@
 # Backlog tickets: list the ready ones, and claim one so no other agent works on it.
 #
 #   scripts/ticket.sh list
+#   scripts/ticket.sh claim next [agent-name]       # claim the first free ready ticket
 #   scripts/ticket.sh claim <NNN-slug> [agent-name]
 #   scripts/ticket.sh verify <NNN-slug>     # after exit 4: is the claim on origin ours?
 #
@@ -26,12 +27,18 @@
 # branches on origin: a claim reaches main's backlog only when its PR merges.
 # Releasing a claim means deleting its branch on origin. Only the user does that.
 #
+# `claim next` tries the free ready tickets in priority order and stops at the first one it wins.
+# Losing a race (exit 3) moves it on to the next ticket; any other failure stops it.
+#
 # Exit codes: 0 claimed (or listed), 2 usage, dirty checkout, or not a ready ticket,
-# 3 already claimed or lost the race, 4 origin unreachable or the outcome unknown: see the message,
+# 3 already claimed or lost the race (for `claim next`: no free ready ticket left), 4 origin unreachable or the outcome unknown: see the message,
 # 5 claimed, but the ticket was withdrawn or changed on main meanwhile: don't build it, ask the user.
 set -eu
 
 backlog=docs/backlog/README.md
+
+# The script's own path, before the cd below, so `claim next` can run it again for each ticket.
+self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 
 # Paths here are relative to the repo root, so run from there wherever the script was called from.
 root=$(git rev-parse --show-toplevel) || { echo "ticket: not inside a git checkout" >&2; exit 2; }
@@ -68,7 +75,9 @@ still_ready() {
     die 5 "the claim is yours, but docs/backlog/$1.md changed on main since the claim. Don't build it: ask the user. Leave the branch; only the user releases a claim."
 }
 
-list() {
+# Prints "<NNN-slug>  <state>" for each ready ticket on main, in backlog order. The state is
+# "ready" (free to claim), "claimed (…)", or "not claimable: …".
+ready_tickets() {
   git fetch -q origin main || die 4 "couldn't reach origin"
   # Checked before it's filtered: an empty list from a failed lookup would show claimed tickets as free.
   heads=$(git ls-remote --heads origin) || die 4 "couldn't reach origin to list the claimed tickets"
@@ -83,6 +92,38 @@ list() {
       echo "$slug  ready"
     fi
   done
+}
+
+list() {
+  out=$(ready_tickets) || exit $?
+  [ -z "$out" ] || printf '%s\n' "$out"
+}
+
+# Checks done before any claim: the agent name ($1) and a clean checkout.
+ready_to_claim() {
+  case $1 in
+    '' | *[!A-Za-z0-9._@-]*) die 2 "agent name may only use letters, digits, and . _ @ -" ;;
+  esac
+  # Untracked files count too: they would follow the agent onto the ticket branch.
+  if [ -n "$(git status --porcelain)" ]; then
+    die 2 "commit, stash, or remove your changes first, including untracked files (see git status)"
+  fi
+}
+
+# Claims the first free ready ticket. Each attempt is a separate run of `claim <ticket>`, so that
+# its failures end only that attempt (die exits the shell) and its exit code says what happened.
+claim_next() {
+  agent=$1
+  ready_to_claim "$agent"
+  out=$(ready_tickets) || exit $?
+  free=$(printf '%s\n' "$out" | awk '$2 == "ready" && NF == 2 { print $1 }')
+  for ticket in $free; do
+    rc=0
+    sh "$self" claim "$ticket" "$agent" || rc=$?
+    [ "$rc" -eq 3 ] || exit "$rc"
+    echo "ticket: $ticket was taken, trying the next one" >&2
+  done
+  die 3 "no free ready ticket: see scripts/ticket.sh list"
 }
 
 # Prints the commit that origin's branch $1 points at, or nothing if there's no such branch.
@@ -118,13 +159,7 @@ claim() {
     [0-9][0-9][0-9]-*) ;;
     *) die 2 "not a ticket name: $ticket (expected NNN-slug)" ;;
   esac
-  case $agent in
-    '' | *[!A-Za-z0-9._@-]*) die 2 "agent name may only use letters, digits, and . _ @ -" ;;
-  esac
-  # Untracked files count too: they would follow the agent onto the ticket branch.
-  if [ -n "$(git status --porcelain)" ]; then
-    die 2 "commit, stash, or remove your changes first, including untracked files (see git status)"
-  fi
+  ready_to_claim "$agent"
 
   git fetch -q origin main || die 4 "couldn't reach origin"
   status=$(ticket_status "$ticket")
@@ -216,12 +251,13 @@ verify() {
 case "${1:-}" in
   list) list ;;
   claim)
-    [ $# -ge 2 ] || die 2 "usage: scripts/ticket.sh claim <NNN-slug> [agent-name]"
-    claim "$2" "${3:-${TICKET_AGENT:-$(id -un)}}"
+    [ $# -ge 2 ] || die 2 "usage: scripts/ticket.sh claim next|<NNN-slug> [agent-name]"
+    agent=${3:-${TICKET_AGENT:-$(id -un)}}
+    if [ "$2" = next ]; then claim_next "$agent"; else claim "$2" "$agent"; fi
     ;;
   verify)
     [ $# -ge 2 ] || die 2 "usage: scripts/ticket.sh verify <NNN-slug>"
     verify "$2"
     ;;
-  *) die 2 "usage: scripts/ticket.sh list | claim <NNN-slug> [agent-name] | verify <NNN-slug>" ;;
+  *) die 2 "usage: scripts/ticket.sh list | claim next|<NNN-slug> [agent-name] | verify <NNN-slug>" ;;
 esac
