@@ -34,6 +34,16 @@ What the exit codes mean:
 
 ## 3. Build it
 
+First, check that the ticket wasn't withdrawn or changed while you claimed it. The claim only checked `main` as it was when the script fetched it:
+
+```bash
+git fetch origin main
+git show origin/main:docs/backlog/README.md | grep -F '](NNN-slug.md)'   # the row must still say ready
+git diff --quiet HEAD origin/main -- docs/backlog/NNN-slug.md            # the design doc must be unchanged
+```
+
+If the row is gone or isn't `ready`, or the design doc changed, don't build. Tell the user, and leave the branch: it still holds the claim, and only the user releases it.
+
 Read the ticket's design doc, `docs/backlog/NNN-slug.md`, all of it. Its acceptance checks define what "done" means. Also follow `AGENTS.md`: its rules apply to every ticket.
 
 - If the design doc turns out to be wrong or incomplete, don't guess at something big. Ask the user. Small gaps can be decided and written down in the doc.
