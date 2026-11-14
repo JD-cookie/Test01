@@ -19,13 +19,16 @@
 #   4. Check that the branch on origin points at our commit. Only then is the claim ours. A failed
 #      push alone isn't proof of a lost race (the reply may have been lost), so the outcome is
 #      always decided by what origin holds.
+#   5. Fetch main again and check that the ticket is still `ready` with the same design doc. The
+#      user may have withdrawn or changed it while we claimed it, and only main says so.
 #
 # The ticket list is read from origin/main, not the working tree. Claims are visible as
 # branches on origin: a claim reaches main's backlog only when its PR merges.
 # Releasing a claim means deleting its branch on origin. Only the user does that.
 #
 # Exit codes: 0 claimed (or listed), 2 usage, dirty checkout, or not a ready ticket,
-# 3 already claimed or lost the race, 4 origin unreachable or the outcome unknown: see the message.
+# 3 already claimed or lost the race, 4 origin unreachable or the outcome unknown: see the message,
+# 5 claimed, but the ticket was withdrawn or changed on main meanwhile: don't build it, ask the user.
 set -eu
 
 backlog=docs/backlog/README.md
@@ -46,6 +49,23 @@ tickets() {
         print slug, status
       }
     }'
+}
+
+# Prints the status of ticket $1 on origin/main, or nothing if it has no row there.
+ticket_status() {
+  tickets | awk -v t="$1" '$1 == t { $1 = ""; sub(/^ /, ""); print }'
+}
+
+# After a won claim: is the ticket still ready on main, with the design doc it was claimed with?
+# $2 is the claim commit. Its parent is main as it was when the claim was made.
+still_ready() {
+  git fetch -q origin main ||
+    die 4 "the claim is yours, but main couldn't be fetched to check the ticket is still ready. Run: scripts/ticket.sh verify $1"
+  now=$(ticket_status "$1")
+  [ "$now" = ready ] ||
+    die 5 "the claim is yours, but on main $1 is now '${now:-gone}', not 'ready'. Don't build it: ask the user. Leave the branch; only the user releases a claim."
+  git diff --quiet "$2^" origin/main -- "docs/backlog/$1.md" ||
+    die 5 "the claim is yours, but docs/backlog/$1.md changed on main since the claim. Don't build it: ask the user. Leave the branch; only the user releases a claim."
 }
 
 list() {
@@ -107,7 +127,7 @@ claim() {
   fi
 
   git fetch -q origin main || die 4 "couldn't reach origin"
-  status=$(tickets | awk -v t="$ticket" '$1 == t { $1 = ""; sub(/^ /, ""); print }')
+  status=$(ticket_status "$ticket")
   [ -n "$status" ] || die 2 "$ticket isn't a numbered ticket in $backlog on origin/main"
   [ "$status" = ready ] || die 2 "$ticket has status '$status' on origin/main, not 'ready'"
   git cat-file -e "origin/main:docs/backlog/$ticket.md" 2>/dev/null ||
@@ -165,6 +185,7 @@ Claimed-By: $agent"; }; then
   fi
   if [ "$remote" = "$mine" ]; then
     [ "$pushed" = yes ] || track "$ticket"
+    still_ready "$ticket" "$mine"
     echo "claimed $ticket (claim $id) on branch $ticket"
     return 0
   fi
@@ -182,8 +203,9 @@ verify() {
   mine=$(git rev-parse --verify -q "refs/heads/$ticket") || die 2 "there's no local branch $ticket"
   remote=$(remote_head "$ticket") || die 4 "couldn't reach origin"
   if [ "$remote" = "$mine" ]; then
-    echo "claimed: origin's $ticket is your claim commit"
     track "$ticket"
+    still_ready "$ticket" "$mine"
+    echo "claimed: origin's $ticket is your claim commit"
   elif [ -z "$remote" ]; then
     die 4 "origin has no branch $ticket, so the claim didn't happen. Delete the local branch (git branch -D $ticket) and claim again."
   else

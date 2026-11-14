@@ -25,24 +25,16 @@ Use a name that tells agents apart, e.g. `claude-<short session id>`. The script
 - creates the branch `NNN-slug` from `origin/main`
 - commits the status `in progress (claim <id>, <agent>, <time>)`
 - pushes create-only, then checks that `origin` has *its* commit
+- fetches `main` again and checks that the ticket is still `ready`, with the design doc it was claimed with
 
 What the exit codes mean:
 - **0:** the ticket is yours, and you're on its branch.
 - **3:** another agent got there first. Go back to step 1 and take the next ticket. Never delete or overwrite another agent's branch, and never push to it with `--force`.
 - **2:** the ticket isn't `ready`, your checkout has changes (untracked files count), a local branch is in the way, or the claim commit failed. Your checkout is left as it was. Fix the cause or ask the user.
 - **4:** `origin` couldn't be reached, so the outcome isn't known. If the script kept your local branch, run `scripts/ticket.sh verify NNN-slug` once `origin` is reachable. It returns 0 if the claim is yours and 3 if it isn't. Otherwise, try the claim again.
+- **5:** the claim is yours, but the user withdrew or changed the ticket on `main` while you claimed it. Don't build it. Tell the user, and leave the branch: it still holds the claim, and only the user releases it.
 
 ## 3. Build it
-
-First, check that the ticket wasn't withdrawn or changed while you claimed it. The claim only checked `main` as it was when the script fetched it:
-
-```bash
-git fetch origin main
-git show origin/main:docs/backlog/README.md | grep -F '](NNN-slug.md)'   # the row must still say ready
-git diff --quiet HEAD origin/main -- docs/backlog/NNN-slug.md            # the design doc must be unchanged
-```
-
-If the row is gone or isn't `ready`, or the design doc changed, don't build. Tell the user, and leave the branch: it still holds the claim, and only the user releases it.
 
 Read the ticket's design doc, `docs/backlog/NNN-slug.md`, all of it. Its acceptance checks define what "done" means. Also follow `AGENTS.md`: its rules apply to every ticket.
 
