@@ -28,7 +28,8 @@
 # Releasing a claim means deleting its branch on origin. Only the user does that.
 #
 # `claim next` tries the free ready tickets in priority order and stops at the first one it wins.
-# Losing a race (exit 3) moves it on to the next ticket; any other failure stops it.
+# Losing a race (exit 3) moves it on to the next ticket. Exit 2 reads the list again once, in case
+# the user withdrew the ticket. Any other failure stops it.
 #
 # Exit codes: 0 claimed (or listed), 2 usage, dirty checkout, or not a ready ticket,
 # 3 already claimed or lost the race (for `claim next`: no free ready ticket left), 4 origin unreachable or the outcome unknown: see the message,
@@ -117,16 +118,31 @@ ready_to_claim() {
 
 # Claims the first free ready ticket. Each attempt is a separate run of `claim <ticket>`, so that
 # its failures end only that attempt (die exits the shell) and its exit code says what happened.
+# Exit 3 (another agent won) moves on to the next ticket. Exit 2 can mean the user withdrew the
+# ticket after it was listed, so the list is read again once and the claims start over: a withdrawn
+# ticket is gone from the new list. Other causes of exit 2 (a local branch in the way, a failed
+# commit) fail again on the retry, which then stops with their message.
 claim_next() {
   agent=$1
   ready_to_claim "$agent"
-  out=$(ready_tickets) || exit $?
-  free=$(printf '%s\n' "$out" | awk '$2 == "ready" && NF == 2 { print $1 }')
-  for ticket in $free; do
-    rc=0
-    sh "$self" claim "$ticket" "$agent" || rc=$?
-    [ "$rc" -eq 3 ] || exit "$rc"
-    echo "ticket: $ticket was taken, trying the next one" >&2
+  for pass in 1 2; do
+    out=$(ready_tickets) || exit $?
+    free=$(printf '%s\n' "$out" | awk '$2 == "ready" && NF == 2 { print $1 }')
+    retry=no
+    for ticket in $free; do
+      rc=0
+      sh "$self" claim "$ticket" "$agent" || rc=$?
+      if [ "$rc" -eq 3 ]; then
+        echo "ticket: $ticket was taken, trying the next one" >&2
+      elif [ "$rc" -eq 2 ] && [ "$pass" -eq 1 ]; then
+        echo "ticket: $ticket couldn't be claimed, reading the ready tickets again" >&2
+        retry=yes
+        break
+      else
+        exit "$rc"
+      fi
+    done
+    [ "$retry" = yes ] || break
   done
   die 3 "no free ready ticket: see scripts/ticket.sh list"
 }
