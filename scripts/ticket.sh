@@ -52,11 +52,15 @@ die() { code=$1; shift; echo "ticket: $*" >&2; exit "$code"; }
 # like an empty backlog.
 tickets() {
   text=$(git show "origin/main:$backlog") || die 2 "couldn't read $backlog on origin/main"
+  # A row whose number cell and linked doc disagree (003 linking 004-x.md) gets the status
+  # "mismatch", so it can't be claimed under either number.
   printf '%s\n' "$text" | awk -F'|' '
     $2 ~ /^ *[0-9][0-9][0-9] *$/ {
       if (match($3, /\]\([0-9][0-9][0-9]-[a-z0-9-]+\.md\)/)) {
         slug = substr($3, RSTART + 2, RLENGTH - 6)
+        num = $2; gsub(/ /, "", num)
         status = $5; gsub(/^ +| +$/, "", status)
+        if (substr(slug, 1, 3) != num) status = "mismatch: the # column says " num
         print slug, status
       }
     }'
@@ -89,7 +93,11 @@ ready_tickets() {
   branches=$(printf '%s\n' "$heads" | sed 's|.*refs/heads/||')
   rows=$(tickets) || exit $?
   printf '%s\n' "$rows" | while read -r slug status; do
-    [ "$status" = ready ] || continue
+    case $status in
+      ready) ;;
+      mismatch:*) echo "$slug  not claimable: the row's # column doesn't match the doc's number. Fix the row on main"; continue ;;
+      *) continue ;;
+    esac
     if ! git cat-file -e "origin/main:docs/backlog/$slug.md" 2>/dev/null; then
       echo "$slug  not claimable: docs/backlog/$slug.md is missing on main"
     elif printf '%s\n' "$branches" | grep -qx -- "$slug"; then
