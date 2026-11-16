@@ -14,7 +14,7 @@ scripts/ticket.sh claim next <agent-name>        # the first free ready ticket
 scripts/ticket.sh claim NNN-slug <agent-name>    # only if the user named a ticket
 ```
 
-Picking and claiming are one step, so the time between seeing a ticket as free and claiming it stays short. `claim next` goes through `main`'s `ready` tickets in priority order, skips those already claimed (their branch exists on `origin`), and tries to claim each one. If another agent wins a race for one, it moves on to the next. If a ticket stopped being `ready` after it was listed, it reads the list again once and starts over. It stops at the first ticket it wins. To see the tickets and which are claimed without claiming anything, run `scripts/ticket.sh list`.
+Picking and claiming are one step, so the time between seeing a ticket as free and claiming it stays short. `claim next` goes through `main`'s `ready` tickets in priority order, skips those already claimed (their branch exists on `origin`), and tries to claim the first free one. If another agent wins the race for it, it tries the next one. If a ticket stopped being `ready` after it was listed, it reads the list again once and starts over. It stops at the first ticket it wins. To see the tickets and which are claimed without claiming anything, run `scripts/ticket.sh list`.
 
 Don't build an `idea` or `designed` item, and don't mark anything `ready` yourself: only the user does that.
 

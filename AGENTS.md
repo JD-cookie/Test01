@@ -67,7 +67,7 @@ Each rule says where it applies and why it exists. Reviewers should flag changes
 
 ### 3. Every Feature Ships With Its Doc
 
-**Rule:** a PR that adds or changes behavior updates the spec in the same PR: `docs/features/NNN-<slug>.md` for a feature, `docs/devops.md` for environments, config, CI, or releases. A feature's number is given when its ticket is marked `ready` in the backlog, and its branch is named after the doc (`003-delete-expired-sessions`). The docs must hold enough detail to rebuild the system from them alone. When a feature built from the backlog is done, its row leaves `docs/backlog/README.md`.
+**Rule:** a PR that adds or changes behavior updates the spec in the same PR: `docs/features/NNN-<slug>.md` for a feature, `docs/devops.md` for environments, config, CI, or releases. A feature's number is given when its ticket is marked `ready` in the backlog, and its branch is named after the doc (`NNN-<slug>`). The docs must hold enough detail to rebuild the system from them alone. When a feature built from the backlog is done, its row leaves `docs/backlog/README.md`.
 
 **Applies to:** every PR that touches `app/`, `server/`, or `.github/`. Docs-only, test-only, and release PRs are exempt.
 

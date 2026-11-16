@@ -1,6 +1,6 @@
-# 003: Delete expired session rows
+# Delete expired session rows
 
-Status: **ready**. Ticket design doc: it moves to `docs/features/` in the PR that builds it.
+Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNN-delete-expired-sessions.md`. It moves to `docs/features/` in the PR that builds it.
 
 ## Summary
 

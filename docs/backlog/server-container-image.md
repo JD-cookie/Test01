@@ -1,6 +1,6 @@
-# 004: Container image for the server
+# Container image for the server
 
-Status: **ready**. Ticket design doc: it moves to `docs/features/` in the PR that builds it.
+Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNN-server-container-image.md`. It moves to `docs/features/` in the PR that builds it.
 
 ## Summary
 
