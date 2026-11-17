@@ -2,7 +2,7 @@
 
 Feature and work requests that aren't built yet. This file is the project's ticket system: each item is one row, its history is this file's git history, and each ticket becomes one branch and one PR.
 
-**Agents: pick up work with the `next-ticket` skill, [`.agents/skills/next-ticket/SKILL.md`](../../.agents/skills/next-ticket/SKILL.md).** It uses [`scripts/ticket.sh`](../../scripts/ticket.sh) to list the ready tickets and to claim one. Claude Code, Codex, and opencode all find it as a skill. Any other agent follows the same file: see "Backlog tickets" in [`AGENTS.md`](../../AGENTS.md#backlog-tickets).
+**Agents: pick up work with the `next-ticket` skill, [`.agents/skills/next-ticket/SKILL.md`](../../.agents/skills/next-ticket/SKILL.md).** It uses [`scripts/ticket.sh`](../../scripts/ticket.sh) to list the ready tickets and to claim one. To get an item ready to build, use the `refine-ticket` skill, [`.agents/skills/refine-ticket/SKILL.md`](../../.agents/skills/refine-ticket/SKILL.md). Claude Code, Codex, and opencode all find both as skills. Any other agent follows the same file: see "Backlog tickets" in [`AGENTS.md`](../../AGENTS.md#backlog-tickets).
 
 ## Statuses
 
@@ -10,14 +10,15 @@ Feature and work requests that aren't built yet. This file is the project's tick
 |---|---|---|
 | `idea` | A row, no design doc yet | Anyone |
 | `designed` | Has a design doc, `docs/backlog/<slug>.md`, but it isn't ready to build | Anyone |
-| `ready` | Has a **number** and a design doc `docs/backlog/NNN-<slug>.md` with acceptance checks, and fits in one PR. Agents only pick up `ready` tickets. | **The user**, in a PR to `main` |
+| `ready` | Has a **number** and a design doc `docs/backlog/NNN-<slug>.md` that meets the [Definition of Ready](#definition-of-ready). Agents only pick up `ready` tickets. | **The user decides.** An agent may make the edit after the user approves, in a PR the user merges. |
 | `in progress (claim …)` | Claimed by an agent. This status is only on the ticket's branch: it reaches `main` with the PR, which removes the row anyway. | `scripts/ticket.sh claim` |
 
 ## How it works
 
 - **Adding an item:** add a row with status `idea`. Leave the `#` column empty. A design doc is optional at first.
 - **Designing an item:** write `docs/backlog/<slug>.md`, for example `password-reset.md`, link the title to it, and set the status to `designed`. Use the same sections as a feature doc (see [../README.md](../README.md#writing-a-feature-doc)), and fill in as much as is known.
-- **Marking it ready (the user):** give it the next free number. That is one more than the highest number in this table and in [`docs/features/`](../features/). Rename its doc to `NNN-<slug>.md`, check that the doc has acceptance checks and no open questions, and set the status to `ready`. Numbers are given out one at a time, on `main`, so two agents working in parallel can never take the same one. The ticket's branch is named `NNN-<slug>`.
+- **Refining it:** run the `refine-ticket` skill on the item. It checks the doc against the [Definition of Ready](#definition-of-ready), asks the user about the open decisions, proposes a split if it's too big, and gets an independent review. It records all of that in the doc's **Readiness review** section, then asks the user to approve.
+- **Marking it ready (the user decides):** give it the next free number. That is one more than the highest number in this table, in [`docs/features/`](../features/), and in the names of the `NNN-*` and `ready-NNN` branches on `origin`. Rename its doc to `NNN-<slug>.md`, check that it meets the Definition of Ready, and set the status to `ready`, in one PR on a branch named `ready-NNN`. Push that branch create-only (`git push --force-with-lease=refs/heads/ready-NNN: …`): if it already exists, another ready PR holds the number, so take the next one. Each number then reaches `main` only once, so two agents working in parallel can never take the same one. The user can do this by hand, or approve it in `refine-ticket`, which does it. The ticket's branch is named `NNN-<slug>`.
 - **Claiming it (an agent):** `scripts/ticket.sh claim next <agent-name>` claims the first free `ready` ticket, and `claim NNN-<slug>` claims a named one. Whoever creates the ticket's branch on `origin` first holds the claim, and everyone else is turned away. No merge is needed. To see what's free: `scripts/ticket.sh list`.
 - **Building it,** on its branch, in its PR:
   1. Move the design doc to `docs/features/NNN-<slug>.md` and bring it up to date with what was built, including a **Delivery and review** section (see [../README.md](../README.md#writing-a-feature-doc)).
@@ -27,6 +28,33 @@ Feature and work requests that aren't built yet. This file is the project's tick
 - **Releasing a claim** (only the user): delete the ticket's branch on `origin`. The ticket is free again, because on `main` it still says `ready`.
 - **Dropping an item:** delete the row and its design doc, and note why in the commit message.
 - **Order:** rows are roughly in priority order, highest first. Agents take the first free `ready` ticket unless told otherwise. Reorder freely.
+- **Blocked items:** an item that can't start until others are built begins its Notes with "Blocked by: …", naming those items by title. Don't mark it `ready` until they're built.
+
+## Definition of Ready
+
+A ticket is ready to build when its design doc meets every item that applies. The `refine-ticket` skill checks each one, and reviewers can use the same list.
+
+1. **Purpose:** the summary says what problem it solves, for whom, and what changes for users or operators. It also says what doesn't change. For a change to existing behavior, it states the current behavior and the behavior wanted.
+2. **Needed:** it isn't already built, and it doesn't repeat or contradict another backlog item or something dropped before.
+3. **Scope:** what's in and what's out is explicit, including an out-of-scope list for anything nearby that a builder might be tempted to include. Anything left for later is a separate backlog row or a known gap, not a vague "maybe".
+4. **Fits one PR:** one branch, one reviewable PR, one behavior change that can ship on its own, and small enough for one agent session. A rough guide: if the implementation map touches more than about three areas (app, server, CI, infra), or the acceptance checks fall into groups that could each ship alone, split it.
+5. **Enough information to build it without asking:**
+   - every endpoint, table, setting, message, and error code it adds or changes, with exact values
+   - the files in the implementation map exist, or are clearly new files
+   - links to the feature docs it changes
+   - the backlog items that block it, if any
+6. **Steps only the user can do** are listed as tasks for the user: settings, secrets, rulesets, accounts, and anything else an agent can't do. For each one, the doc says when it has to happen (before the PR is merged, or after it ships) and how the builder can check that it's done.
+7. **Acceptance checks:** each one is a concrete scenario, with an input or setup and an observable expected result. They cover the failure paths and edge cases, not just the happy path. No check uses words like "works", "fast", or "secure" without saying what's measured. Each check also says:
+   - **where it's tested:** the highest existing entry point that can test it, such as the HTTP API through Fastify's `inject`, the claim script run against a scratch repo, a CI job, or the app on a device
+   - **what shows it passed:** something other than the builder's word, such as a test, a CI job's result, or a command and its output
+8. **The project's rules** ([`AGENTS.md`](../../AGENTS.md#rules)) are addressed where they apply. For example:
+   - attempt limits (rule 1)
+   - more than one instance (rule 2): shared state, and migrations or jobs run by several instances at once
+   - docs updated in the same PR (rule 3)
+   - versions left to release-please (rule 4)
+   - workflow permissions and triggers (rule 5)
+9. **Security and failure modes:** who can trigger it, what happens when a dependency is down, and what's logged. It also lists the known gaps.
+10. **No open questions.** Choices are written down in "Decisions made for this ticket", with the reason for each.
 
 ## Items
 
@@ -34,8 +62,7 @@ Feature and work requests that aren't built yet. This file is the project's tick
 |---|---|---|---|---|
 |  | [Delete expired session rows](delete-expired-sessions.md) | Server | designed | Housekeeping only: expired sessions are already rejected. Gap from [001](../features/001-accounts.md#security). |
 |  | [Container image for the server](server-container-image.md) | DevOps | designed | A `Containerfile` built with podman. CI builds and smoke-tests it on every PR, and each server release made by release-please publishes it to GHCR. Needs a tag ruleset from the user first. The first step toward CD and Kubernetes. |
-| 003 | [A skill that gets a ticket ready to build](003-refine-ticket-skill.md) | Dev tooling | in progress (claim 37dc4f12, claude-00cb8987, 2026-11-17T06:47Z) | `refine-ticket`: restates the goal, checks the item isn't already built, checks it against a written Definition of Ready, interviews the user about open decisions with the `grilling` skill, proposes vertical slices if it's too big, gets an adversarial review backed by evidence (two reviewers in the first round, then the more useful one), then asks the user to approve it before marking it `ready`. Uses `ticket.sh ready` (next row) if it exists by then. |
-|  | Ticket commands for the user: `new` and `ready` | Dev tooling | idea | Add two commands to `scripts/ticket.sh` for the steps in "How it works" that are fiddly by hand. `new <slug> "<title>"` adds an `idea` row and creates `docs/backlog/<slug>.md` with the feature doc sections (see [../README.md](../README.md#writing-a-feature-doc)). `ready <slug>` runs on a branch from an up-to-date `main`. It gives the ticket the next free number, renames the doc with `git mv`, and updates the row's number, link, and status. It checks that the doc has acceptance checks, and makes one commit for a PR. Two `ready` PRs open at once could pick the same number, so `ready` reserves it with a create-only `ready-NNN` branch, the PR's branch, and takes the next number if that branch exists. See [refine-ticket-skill.md](003-refine-ticket-skill.md). Adding, editing, reordering, and dropping rows stay plain edits. |
+|  | Ticket commands for the user: `new` and `ready` | Dev tooling | idea | Add two commands to `scripts/ticket.sh` for the steps in "How it works" that are fiddly by hand. `new <slug> "<title>"` adds an `idea` row and creates `docs/backlog/<slug>.md` with the feature doc sections (see [../README.md](../README.md#writing-a-feature-doc)). `ready <slug>` runs on a branch from an up-to-date `main`. It gives the ticket the next free number, renames the doc with `git mv`, and updates the row's number, link, and status. It checks that the doc has acceptance checks, and makes one commit for a PR. Two `ready` PRs open at once could pick the same number, so `ready` reserves it with a create-only `ready-NNN` branch, the PR's branch, and takes the next number if that branch exists. See [refine-ticket-skill.md](../features/003-refine-ticket-skill.md). Adding, editing, reordering, and dropping rows stay plain edits. |
 |  | Decide what the app does beyond accounts | Product | idea | The project is for learning, so pick features that give the technology below real work to do: data worth tracing, deploys worth automating. |
 |  | OpenTelemetry | Observability | idea | Traces, metrics, and logs from the server, and maybe from the app too. Needs a collector and somewhere to view the data. Not designed yet. |
 |  | Signed build provenance for images | DevOps, security | idea | After the server image. Have the publish job attest each image (`actions/attest-build-provenance`), and have the cluster only run images whose provenance checks out. Then an image proves it was built by the release workflow from a release tag, rather than relying on who can push to GHCR. Anyone with write access can push today; see [Container image for the server](server-container-image.md#security-and-configuration). |
