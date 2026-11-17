@@ -108,13 +108,13 @@ Then ask: **"Mark it ready?"**
 
 Until `scripts/ticket.sh ready` exists (see the backlog), follow these steps by hand.
 
-1. **Find the next free number.** A number must be unused on `main` and in every ticket and reservation branch on `origin`:
+1. **Find the next free number.** First check, on a fresh `origin/main`, that the item's row still has no number and isn't `ready`: if it does, someone else marked it ready, so stop and tell the user. A number must be unused on `main` and in every ticket and reservation branch on `origin`:
 
    ```sh
    git fetch -q origin
    max=$({
      git show origin/main:docs/backlog/README.md | awk -F'|' '$2 ~ /^ *[0-9][0-9][0-9] *$/ { print $2 }'
-     git ls-tree --name-only origin/main docs/features/ | sed -nE 's#.*/([0-9]{3})-.*#\1#p'
+     git ls-tree -r --name-only origin/main docs/features/ | sed -nE 's#.*/([0-9]{3})-.*#\1#p'
      git ls-remote --heads origin | sed -nE 's#.*refs/heads/(ready-)?([0-9]{3})(-.*)?$#\2#p'
    } | tr -d ' ' | sort -n | tail -1)
    n=$(printf '%03d' "$(expr "${max:-0}" + 1)")
@@ -136,6 +136,19 @@ Until `scripts/ticket.sh ready` exists (see the backlog), follow these steps by 
    ```
 
    If the push is rejected because `ready-$n` already exists, another refinement holds that number. Undo the ready commit with `git reset --hard HEAD^`, go back to 1, and use the number it gives now. If `origin` can't be reached, stop and tell the user: the number is reserved only if the check passes.
+
+   Then check that **no other ready PR is for the same item.** A number is unique, but two agents could refine the same item and reserve two numbers for it. List every other `ready-*` branch on `origin` that changes this item's doc:
+
+   ```sh
+   for b in $(git ls-remote --heads origin 'ready-*' | sed 's#.*refs/heads/##'); do
+     [ "$b" = "ready-$n" ] && continue
+     git fetch -q origin "$b" &&
+       git diff --name-only origin/main FETCH_HEAD -- "docs/backlog/<slug>.md" | grep -q . &&
+       echo "$b"
+   done
+   ```
+
+   If it prints a branch, don't open the PR. Tell the user both branches exist and let them choose which to keep. Never delete the other agent's branch. Because each agent checks after its own push, two agents racing on one item can't both miss each other: at worst, both stop and ask.
 5. **Open the PR** from `ready-$n` to `main`, with a Conventional Commits title like the commit's. The body says which ticket, the number and how it was chosen, and links the Readiness review section. End with the attribution line. Link the PR in T3 Code if that tool is available.
 6. **Take it through review** like any PR (see `next-ticket`, step 4). The user merges it. Never merge it yourself. Once it's merged, `scripts/ticket.sh list` shows the ticket as `ready`.
 

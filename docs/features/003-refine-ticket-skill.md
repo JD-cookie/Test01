@@ -80,6 +80,7 @@ The user asks an agent to refine an item, for example "refine the delete-expired
    1. Take one more than the highest number used in `main`'s backlog table, in `docs/features/`, and in the names of all `NNN-*` and `ready-NNN` branches on `origin`.
    2. Push the branch create-only (`--force-with-lease=refs/heads/ready-NNN:`), and check that `origin` has this commit, as `scripts/ticket.sh claim` does.
    3. If another refinement got there first, take the next number and try again.
+   4. Before step 1, check on a fresh `main` that the item still has no number. After the push, check that no other `ready-*` branch changes the same item's doc. If one does, two agents refined the same item: the skill doesn't open the PR, and asks the user which to keep. Each agent checks after its own push, so two racing on one item can't both miss each other.
 
    The refinement's doc changes are one commit, and the ready edit is a second commit on top, so a lost race undoes only the second. The skill's step 9 has the exact commands. Until `scripts/ticket.sh ready` exists (see the backlog), the skill follows these steps by hand. Once it exists, the command does them. If the user says no, or asks for changes, the skill keeps the doc `designed`, makes the changes, and goes back to step 4. If the user wants to stop there, the skill asks whether to open a PR with the doc changes, status still `designed`, on `refine-<slug>`, and pushes it only on a yes.
 
@@ -206,4 +207,7 @@ Built on branch `003-refine-ticket-skill`, claimed with `scripts/ticket.sh claim
 - **The split comes before the interview,** and an idea's draft doc comes after the "is it needed" checks. See "Decisions made for this ticket".
 - `gh pr list` fails in a clone whose `origin` is a local path, so test runs can't check open PRs. A real run in the checkout can.
 
-**Review:** to be filled in from the PR's review.
+**Review (PR #10):**
+- Qodo, "Ready tickets can reuse old numbers": it said `git ls-tree --name-only origin/main docs/features/` doesn't list the files inside the folder. It does, with the trailing slash (it printed `docs/features/001-accounts.md` and `002-rate-limiting.md`). But the command now uses `-r`, so it doesn't depend on the slash. Tested on a scratch remote where the highest number, 005, was only in `docs/features/`: the result was 005.
+- Qodo, "Two refinements can ready one ticket": correct. The `ready-NNN` branch reserves a number, not an item, so two agents refining one item could both open ready PRs. Fixed: step 9 checks that the item is still unnumbered on a fresh `main`, and after the push, lists other `ready-*` branches that change the item's doc, stopping to ask the user if there's one. Tested on a scratch remote: with `ready-006` for the same item and `ready-007` for another, it printed only `ready-006`.
+- Rules, skills, or reviewer context: nothing to change.
