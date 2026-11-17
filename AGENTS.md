@@ -117,6 +117,8 @@ A skill is a folder with a `SKILL.md`: a name, a description that tells the agen
 
 Add new skills under `.agents/skills/`, never as a real folder in `.claude/skills/`. An agent that reads neither folder can still follow a skill: it's plain Markdown.
 
+A skill copied from elsewhere, like `grilling` from [Matt Pocock's skills](https://github.com/mattpocock/skills), keeps its license file in its folder and a note at the top that links the exact upstream commit. Change it only by copying a newer upstream version, so it stays comparable with the original.
+
 ## Working in this repo
 
 - Branch from `main` and open a PR. Don't push to `main` directly. PRs get a Qodo review, and every finding is either fixed or answered with the reason.
