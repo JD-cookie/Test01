@@ -1,6 +1,6 @@
 # A skill that gets a ticket ready to build
 
-Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNN-refine-ticket-skill.md`. It moves to `docs/features/` in the PR that builds it.
+Status: **ready** (marked by the user, 2026-11-17), ticket 003. It moves to `docs/features/` in the PR that builds it.
 
 ## Summary
 
