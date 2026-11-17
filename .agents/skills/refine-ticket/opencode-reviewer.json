@@ -3,17 +3,11 @@
   "agent": {
     "plan": {
       "permission": {
-        "edit": "deny",
-        "webfetch": "deny",
-        "bash": {
-          "*": "deny",
-          "git log*": "allow",
-          "git show*": "allow",
-          "git diff*": "allow",
-          "git grep*": "allow",
-          "grep *": "allow",
-          "ls*": "allow"
-        }
+        "*": "deny",
+        "read": "allow",
+        "grep": "allow",
+        "glob": "allow",
+        "list": "allow"
       }
     }
   }

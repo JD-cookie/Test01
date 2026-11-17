@@ -90,10 +90,12 @@ A clone has only committed files: none of the ignored ones, such as `server/.env
 | Agent | Command | What keeps it read-only |
 |---|---|---|
 | Codex | `codex exec -s read-only -c approval_policy='"never"' --ephemeral -C "$rc" -o "$out" - < "$prompt"` | The read-only sandbox, which the OS enforces. `approval_policy="never"` is required: with a user config of `on-request` and an automatic approver, Codex asks to leave the sandbox and gets a yes. |
-| opencode | `cd "$rc" && opencode run --agent plan "$(cat "$prompt")" > "$out"` | The `opencode.json` copied into the clone, which overrides user settings for the `plan` agent: no edits, no web fetches, and only `git log`, `git show`, `git diff`, `git grep`, `grep`, and `ls` in the shell. Check it with `opencode debug agents` from `$rc`: the plan agent's last `shell` rules must be those. |
-| Claude Code | `cd "$rc" && claude -p --permission-mode plan --disallowedTools Edit Write NotebookEdit < "$prompt" > "$out"` | Plan mode, which doesn't edit files or run commands that change anything, and the edit tools turned off. |
+| opencode | `cd "$rc" && opencode run --standalone --agent plan "$(cat "$prompt")" > "$out"` | The `opencode.json` copied into the clone, which overrides user settings for the `plan` agent: everything denied except the `read`, `grep`, `glob`, and `list` tools. No shell, edits, subagents, or web. Check it from `$rc` with `opencode debug agents --standalone`: the plan agent's rules must start `* * deny` and allow only those four. `--standalone` makes opencode read the config fresh: its background service caches each directory's config the first time it sees it. |
+| Claude Code | `cd "$rc" && claude -p --permission-mode plan --tools Read,Grep,Glob --strict-mcp-config < "$prompt" > "$out"` | Only the `Read`, `Grep`, and `Glob` tools exist in the session, with no MCP servers, in plan mode. |
 
 Run the round-1 reviewers in parallel if you can (for example, two background commands), or one after the other. A review can take several minutes: allow up to 15 before treating it as stuck. Note the model each one used: `codex` prints it in its header, and opencode prints it on each step (`> plan · <model>`). opencode and Claude use their configured default unless `-m` or `--model` is given. If the default is a small model, ask the user which model to use.
+
+Only Codex has a shell, and its sandbox is enforced by the OS. The other two can only read files. Allowing some shell commands isn't read-only: `git diff --output=<file>`, for one, writes a file. So reviewers don't run tests or probes. A claim that only running something can check comes back as a "needs a run" finding, and you run it, as a probe.
 
 **After each round, check that nothing changed:**
 - in the clone, `git -C "$rc" status --porcelain --ignored` lists nothing but `opencode.json`
@@ -103,7 +105,7 @@ Run the round-1 reviewers in parallel if you can (for example, two background co
 If anything changed, stop, and tell the user what changed and which reviewer ran. These checks can't see changes outside the repo, so the read-only modes above are the real limit, and the checks only confirm them. A reviewer can still *read* files outside the clone: it runs as you.
 
 **Each finding:**
-1. **Check its evidence.** Open the file and line it cites, or rerun its command in a scratch place. A finding with no evidence, or with evidence that doesn't show what it claims, is **dropped**. Count the drops, with the reason for each.
+1. **Check its evidence.** Open the file and line it cites, or rerun its command in a scratch place. A finding with no evidence, or with evidence that doesn't show what it claims, is **dropped**. Count the drops, with the reason for each. For a **"needs a run"** finding, run what it names as a probe (see "Probes"). It's kept if the output shows the problem, with that output as its evidence, and dropped if not.
 2. **Compare the reviewer's restatement** with yours from step 2. A real difference is a finding: the doc can be read two ways.
 3. **Fix it in the doc, or answer it** with the reason it stays, as for a PR finding. A fix that needs a decision goes to the user through step 6.
 
@@ -111,7 +113,7 @@ After the fixes, run the next round. Stop when a round has no kept findings. Aft
 
 ## 8. Ask the user for approval
 
-When every Definition of Ready item passes or doesn't apply, and the last review round had nothing kept, write the doc's **Readiness review** section (below), and show the user:
+When every Definition of Ready item passes or doesn't apply, and the last review round had nothing kept, write the doc's **Readiness review** section (below). If the row says "Blocked by: …" and something it names isn't built yet, tell the user the doc is ready but the item can't be marked `ready` until then, and stop. Otherwise, show the user:
 - the goal, restated
 - the Definition of Ready results
 - what changed in the doc, and the questions and answers
@@ -128,7 +130,7 @@ Until `scripts/ticket.sh ready` exists (see the backlog), follow these steps by 
 
 In the commands below, `$title` is the item's title exactly as it is in its row on `main` (for a linked title, the text inside `[…]`), and `$slug` is the doc's name without `.md`. If any command fails, stop and tell the user: a check that couldn't run hasn't passed.
 
-1. **Check the item and find the next free number.** On a fresh `origin/main`, the item's row must still have no number and not be `ready`. If it has one, someone else marked it ready: stop and tell the user. The number must be unused on `main` and in every ticket and reservation branch on `origin`:
+1. **Check the item and find the next free number.** On a fresh `origin/main`, the item's row must still have no number and not be `ready`. If it has one, someone else marked it ready: stop and tell the user. If its Notes start with "Blocked by: …", each item named there must be built: its row is gone from the backlog, and it's in the Features table of `docs/README.md`. If one isn't, stop and tell the user: a blocked item isn't marked ready until what blocks it is built. The number must be unused on `main` and in every ticket and reservation branch on `origin`:
 
    ```sh
    git fetch -q origin &&

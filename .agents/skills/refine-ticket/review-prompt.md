@@ -4,7 +4,7 @@ For round 1, delete the "Earlier rounds" section. -->
 
 You are reviewing a design doc for a ticket in this repository, before anyone builds it. You didn't write the doc, and you haven't seen the conversation that shaped it. That's on purpose: an agent that builds the ticket will have only the repo and the doc, just like you.
 
-**You only read.** Don't edit, create, or delete any file, and don't run commands that change anything: no commits, pushes, installs, or servers. Reading files, `git log`, `git show`, `grep`, and running the tests are fine.
+**You only read.** Don't edit, create, or delete any file, and don't run tests, scripts, servers, or anything else. You're in a throwaway copy of the repo, and your tools may not allow more than reading anyway. If a claim can only be checked by running something, report it as a finding marked **needs a run**, with the exact command and what output would show the problem. The agent that asked for this review will run it.
 
 **Your job is adversarial:** try to show that the doc is wrong, incomplete, or can be read more than one way. Don't praise it, and don't summarize it beyond the restatement below.
 
@@ -35,7 +35,7 @@ Reply with exactly these two parts.
 For each finding, give:
 - **What:** the problem, in one or two sentences
 - **Definition of Ready item:** its number, if one applies
-- **Evidence:** the file and line it relies on, quoted, or a command you ran and its output. A finding without evidence will be dropped, so leave out anything you can't back up.
+- **Evidence:** the file and line it relies on, quoted. For a **needs a run** finding, the command to run and the output that would confirm it. A finding without evidence will be dropped, so leave out anything you can't back up.
 - **Suggested fix:** one sentence
 
 If you find nothing, say "No findings" and list what you checked.
