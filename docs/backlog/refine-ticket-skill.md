@@ -63,7 +63,14 @@ The user asks an agent to refine an item, for example "refine the delete-expired
    - the review findings, and what was done about each
 
    Then it asks: "Mark it ready?"
-9. **Marks it ready, only if the user says yes**, on a branch and in a PR. That PR gives the ticket the next free number, renames the doc to `NNN-<slug>.md`, and sets the row's number, link, and status. It uses `scripts/ticket.sh ready` if that command exists by then (see the backlog), and the manual steps from "How it works" otherwise. The user merges the PR, so the ticket becomes `ready` on `main` only through the user. If the user says no, or asks for changes, the skill keeps the doc `designed`, makes the changes, and goes back to step 4.
+9. **Marks it ready, only if the user says yes**, on a branch and in a PR. That PR gives the ticket the next free number, renames the doc to `NNN-<slug>.md`, and sets the row's number, link, and status. The user merges the PR, so the ticket becomes `ready` on `main` only through the user.
+
+   **Reserving the number.** A number is only unique on `main`, so two refinements in parallel could both pick the same one for their PRs. The number is reserved the same way a ticket is claimed: by creating a branch named after it on `origin`, here `ready-NNN`, which is also the PR's branch.
+   1. Take one more than the highest number used in `main`'s backlog table, in `docs/features/`, and in the names of all `NNN-*` and `ready-NNN` branches on `origin`.
+   2. Push the branch create-only (`--force-with-lease=refs/heads/ready-NNN:`), and check that `origin` has this commit, as `scripts/ticket.sh claim` does.
+   3. If another refinement got there first, take the next number and try again.
+
+   Until `scripts/ticket.sh ready` exists (see the backlog), the skill follows these steps by hand. Once it exists, the command does them. If the user says no, or asks for changes, the skill keeps the doc `designed`, makes the changes, and goes back to step 4.
 
 At any step, the user can stop. The doc keeps whatever was settled so far, and the status stays `designed`.
 
@@ -106,7 +113,13 @@ That way, a ticket's history shows why it was considered ready. Item 9 of "Writi
 
 ## Security and configuration
 
-- The skill only edits docs: the design doc, the backlog, and `docs/README.md`. It doesn't change code or settings. Probes and prototypes it runs to find facts are thrown away, and never committed.
+- The skill only edits docs: the design doc, the backlog, and `docs/README.md`. It doesn't change code or settings.
+- **Probes and prototypes** that find facts run in a scratch directory outside the checkout, or in a throwaway clone whose `origin` is a local bare repo. They're thrown away afterwards, and never committed. They may read the repo and run its tests and scripts there. They must not:
+  - push, or change anything on GitHub (branches, PRs, issues, settings)
+  - touch the user's development database, `server/.env`, or running servers
+  - contact outside services, or use secrets
+
+  A probe that would need any of these is a question for the user instead.
 - Only the user's approval leads to `ready`, and only the user's merge puts it on `main`. The backlog's "Who sets it" column changes from "The user, in a PR to `main`" to "The user decides. An agent may make the edit after the user approves, in a PR the user merges." `AGENTS.md`'s "Only the user marks tickets `ready`" changes the same way.
 - The independent reviewer gets read-only access: it reports findings, and the refining agent makes the edits.
 
@@ -138,6 +151,7 @@ One idea is deliberately not taken: Matt Pocock's specs and briefs leave out fil
   - the updated "Who sets it" text
   - a "Refining it" step in "How it works", between designing an item and marking it ready
   - the "Blocked by: …" convention for the Notes column
+  - in "Marking it ready", the `ready-NNN` branch that reserves the number
 - `docs/README.md`: item 9 of "Writing a feature doc", **Readiness review**.
 - `AGENTS.md`: the `refine-ticket` skill in "Backlog tickets", the updated rule about who marks tickets `ready`, and the Definition of Ready as context for reviewers.
 
@@ -156,9 +170,11 @@ Each check is run by hand, with the transcript or the PR as the evidence, becaus
 4. If the user says yes, the skill opens a PR that gives the item the next free number, renames the doc, and sets the row to `ready`. After the user merges it, `scripts/ticket.sh list` shows the ticket as `ready`.
 5. Run on an `idea` row with no design doc, the skill first writes a draft doc with the feature doc sections, then refines it.
 6. Run on an item that is too big, for example a made-up "OpenTelemetry for the server and the app" with no design, the skill proposes vertical slices, each with what it delivers and what blocks it. With the user's agreement, it adds them to the backlog, each with "Blocked by: …" in its Notes.
-7. Run on a made-up item for something that already exists, for example "Let users log out", the skill reports that it's already built, with where (feature 001), and asks before going on.
-8. The skill never sets a status to `ready` without the user's yes in the same conversation, and never merges a PR.
-9. The Definition of Ready section exists in `docs/backlog/README.md`. `AGENTS.md`, the backlog README, and `docs/README.md` describe the skill and the Readiness review section, and their wording about who marks tickets `ready` matches.
+7. Two refinements approved at the same time get different numbers: the second one's create-only push of `ready-NNN` fails, and it takes the next number. Tested with two clones and a local bare `origin`, as the claim script was.
+8. Run on a made-up item for something that already exists, for example "Let users log out", the skill reports that it's already built, with where (feature 001), and asks before going on.
+9. Probes run only in a scratch directory or a throwaway clone. After a refinement, `git status` in the checkout shows only the doc changes, and `origin` has no new branches other than `ready-NNN`.
+10. The skill never sets a status to `ready` without the user's yes in the same conversation, and never merges a PR.
+11. The Definition of Ready section exists in `docs/backlog/README.md`. `AGENTS.md`, the backlog README, and `docs/README.md` describe the skill and the Readiness review section, and their wording about who marks tickets `ready` matches.
 
 ## Decisions made for this ticket
 
