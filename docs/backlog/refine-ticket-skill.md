@@ -49,13 +49,17 @@ The user asks an agent to refine an item, for example "refine the delete-expired
    - Each part names the parts that block it.
 
    The skill shows the proposed parts as a numbered list, each with a title, what it delivers, and what blocks it. It asks the user whether the size is right and the blocking is correct, and changes it until the user agrees. Then each part becomes its own backlog item, with "Blocked by: …" at the start of its Notes, and the skill refines each one separately.
-7. **Gets an independent review.** It hands a fresh agent the doc and the repo, with none of this conversation's context. If one is available, the reviewer is a different model or a different agent, such as Codex for a doc refined by Claude Code. The reviewer:
+7. **Gets an independent review.** Each reviewer is a fresh agent that gets the doc and the repo, with none of this conversation's context.
+   - **Round 1 has two reviewers,** run separately so neither sees the other's report. Where they're available, they're the two agents that didn't refine the doc: for a doc refined by Claude Code, Codex and opencode. With only one other agent, the second reviewer is a fresh session of the refining agent's own model. Two reviewers find more than one, and the round shows which one is more useful for this ticket, rather than the skill picking one up front.
+   - **Later rounds have one reviewer:** a fresh session of the round-1 reviewer whose findings were the most useful, meaning the most findings kept (fixed in the doc, or turned into a question for the user) rather than answered or dropped. It also gets the previous rounds' findings and what was done about each, so it can check the fixes as well as look for new gaps. If the two were about even, the skill asks the user which to keep.
+
+   Each reviewer:
    - first restates the goal in its own words. If its restatement differs from the skill's in step 2, that difference is a finding: the doc can be read two ways.
    - checks the doc against the Definition of Ready, and tries to break it: missing cases, wrong assumptions about the code, checks that can't fail.
    - backs each finding with evidence, such as the file and line it relies on, or a command and its output. A finding without evidence is dropped, and the report says how many were dropped and why.
    - only reads, and doesn't edit. The refining agent makes the changes.
 
-   Each finding is fixed in the doc, or answered with the reason it stays, just like a PR finding. Fixes that need a decision go back to the user through step 5. After the fixes, a fresh reviewer runs again. After three rounds with findings still coming, the skill stops and asks the user.
+   Each finding is fixed in the doc, or answered with the reason it stays, just like a PR finding. Fixes that need a decision go back to the user through step 5. After the fixes, the next round runs. After three rounds with findings still coming, the skill stops and asks the user.
 8. **Asks the user for approval.** When the doc passes the checklist and the review has nothing left, the skill shows the user:
    - the goal, restated
    - the checklist results
@@ -106,7 +110,7 @@ The skill records its work in a new section of the design doc, **Readiness revie
 - the date, the goal as restated, and the results of the checks that the work is needed
 - the checklist results
 - the questions asked, and the user's answers
-- each review round: who reviewed, the reviewer's restatement of the goal, each finding with its evidence, what was done about it, and how many findings were dropped for lack of evidence
+- each review round: who reviewed (agent and model), and after round 1, which reviewer was kept for later rounds and why; each reviewer's restatement of the goal, each finding with its evidence, what was done about it, and how many findings were dropped for lack of evidence
 - the user's approval
 
 That way, a ticket's history shows why it was considered ready. Item 9 of "Writing a feature doc" in `docs/README.md` describes the section.
@@ -121,7 +125,7 @@ That way, a ticket's history shows why it was considered ready. Item 9 of "Writi
 
   A probe that would need any of these is a question for the user instead.
 - Only the user's approval leads to `ready`, and only the user's merge puts it on `main`. The backlog's "Who sets it" column changes from "The user, in a PR to `main`" to "The user decides. An agent may make the edit after the user approves, in a PR the user merges." `AGENTS.md`'s "Only the user marks tickets `ready`" changes the same way.
-- The independent reviewer gets read-only access: it reports findings, and the refining agent makes the edits.
+- The independent reviewers get read-only access: it reports findings, and the refining agent makes the edits.
 
 ## Prior art
 
@@ -164,7 +168,8 @@ Each check is run by hand, with the transcript or the PR as the evidence, becaus
    - opens with the goal restated, and the results of the three "is it needed" checks, including where it looked
    - produces checklist results for all 10 items
    - asks only about decisions, never about facts it could have looked up, in numbered rounds with a recommended answer for each, and writes the answers into the doc
-   - runs at least one independent review with a fresh agent, and records it in a "Readiness review" section: the reviewer's restatement, each finding with its evidence, and what was done about it
+   - runs round 1 of the review with two fresh reviewers that don't see each other's reports, and any later round with only the reviewer whose findings were the most useful
+   - records each round in a "Readiness review" section: who reviewed, each reviewer's restatement, each finding with its evidence, what was done about it, and which reviewer was kept and why
    - then asks the user to approve
 3. If the user says no, the item stays `designed`, and the doc and the row on `main` don't change status.
 4. If the user says yes, the skill opens a PR that gives the item the next free number, renames the doc, and sets the row to `ready`. After the user merges it, `scripts/ticket.sh list` shows the ticket as `ready`.
@@ -184,5 +189,6 @@ Change these before marking it ready if you disagree:
 - **The interview uses the separate `grilling` skill,** copied from Matt Pocock's skills (decided 2026-11-17), because it's useful beyond refining tickets.
 - **Review findings need evidence,** and those without it are dropped. Review rounds then converge on real gaps instead of growing with speculation.
 - **At most three independent review rounds** before the user is asked. It keeps the loop from running forever on a ticket that's not converging.
+- **Two reviewers in round 1, then the more useful one** (suggested by the user, 2026-11-17). With Claude Code, Codex, and opencode set up, the two agents that didn't refine the doc can both review it, so there's no need to guess which one will do better. Later rounds mostly check the fixes, and one reviewer is enough for that.
 - **A different model for the independent review where possible.** It's not required: a fresh agent of the same model with no shared context is still independent.
 - **File paths stay in the implementation map,** unlike Matt Pocock's briefs. See "Prior art".
