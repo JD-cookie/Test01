@@ -74,15 +74,33 @@ Each reviewer is a **fresh agent**: a new process with none of this conversation
 
 **Later rounds have one reviewer:** a fresh session of the round-1 reviewer whose findings were the most useful, meaning it had the most findings **kept** (fixed in the doc, or turned into a question for the user) rather than answered or dropped. If the two were about even, ask the user which one to keep. A later round's prompt also includes the earlier rounds' findings and what was done about each, so the reviewer checks the fixes as well as looks for new gaps.
 
-**The prompt** is [`review-prompt.md`](review-prompt.md) in this folder. Copy it to a scratch file outside the checkout, and fill in the placeholders. Then run each reviewer from the repo root, with its output in a scratch file:
+**The review copy.** Reviewers never run in your checkout. Before each round, commit the doc changes so far on the refinement branch (`docs(repo): refine <title>`; later rounds add commits), and make a throwaway clone in a scratch directory outside the checkout:
+
+```sh
+rc="$scratch/review-$round/repo"
+git clone -q --no-local --branch "$(git branch --show-current)" "$PWD" "$rc"
+git -C "$rc" remote remove origin
+cp .agents/skills/refine-ticket/opencode-reviewer.json "$rc/opencode.json"
+```
+
+A clone has only committed files: none of the ignored ones, such as `server/.env` or the development database. With no remote, it has nothing to push to.
+
+**The prompt** is [`review-prompt.md`](review-prompt.md) in this folder. Copy it to a scratch file outside the clone, and fill in the placeholders. Then run each reviewer from inside `$rc`, with its output in a scratch file:
 
 | Agent | Command | What keeps it read-only |
 |---|---|---|
-| Codex | `codex exec -s read-only -c approval_policy='"never"' --ephemeral -C "$PWD" -o "$out" - < "$prompt"` | The read-only sandbox. `approval_policy="never"` is required: with a user config of `on-request` and an automatic approver, Codex asks to leave the sandbox and gets a yes. |
-| opencode | `opencode run --agent plan "$(cat "$prompt")" > "$out"` | The built-in `plan` agent, which can't edit files. |
-| Claude Code | `claude -p --permission-mode plan < "$prompt" > "$out"` | Plan mode, which can't edit files or run commands that change anything. |
+| Codex | `codex exec -s read-only -c approval_policy='"never"' --ephemeral -C "$rc" -o "$out" - < "$prompt"` | The read-only sandbox, which the OS enforces. `approval_policy="never"` is required: with a user config of `on-request` and an automatic approver, Codex asks to leave the sandbox and gets a yes. |
+| opencode | `cd "$rc" && opencode run --agent plan "$(cat "$prompt")" > "$out"` | The `opencode.json` copied into the clone, which overrides user settings for the `plan` agent: no edits, no web fetches, and only `git log`, `git show`, `git diff`, `git grep`, `grep`, and `ls` in the shell. Check it with `opencode debug agents` from `$rc`: the plan agent's last `shell` rules must be those. |
+| Claude Code | `cd "$rc" && claude -p --permission-mode plan --disallowedTools Edit Write NotebookEdit < "$prompt" > "$out"` | Plan mode, which doesn't edit files or run commands that change anything, and the edit tools turned off. |
 
-Run the round-1 reviewers in parallel if you can (for example, two background commands), or one after the other. A review can take several minutes: allow up to 15 before treating it as stuck. Note the model each one used: its CLI's output or config says (`codex` prints it in its header; opencode and Claude use their configured default unless `-m` or `--model` is given). After each round, check `git status`: if a reviewer changed anything, undo it, and drop that reviewer for this run.
+Run the round-1 reviewers in parallel if you can (for example, two background commands), or one after the other. A review can take several minutes: allow up to 15 before treating it as stuck. Note the model each one used: `codex` prints it in its header, and opencode prints it on each step (`> plan · <model>`). opencode and Claude use their configured default unless `-m` or `--model` is given. If the default is a small model, ask the user which model to use.
+
+**After each round, check that nothing changed:**
+- in the clone, `git -C "$rc" status --porcelain --ignored` lists nothing but `opencode.json`
+- in your checkout, `git status --porcelain --ignored` is the same as before the round
+- `git ls-remote --heads origin` is the same as before the round
+
+If anything changed, stop, and tell the user what changed and which reviewer ran. These checks can't see changes outside the repo, so the read-only modes above are the real limit, and the checks only confirm them. A reviewer can still *read* files outside the clone: it runs as you.
 
 **Each finding:**
 1. **Check its evidence.** Open the file and line it cites, or rerun its command in a scratch place. A finding with no evidence, or with evidence that doesn't show what it claims, is **dropped**. Count the drops, with the reason for each.
@@ -108,49 +126,60 @@ Then ask: **"Mark it ready?"**
 
 Until `scripts/ticket.sh ready` exists (see the backlog), follow these steps by hand.
 
-1. **Find the next free number.** First check, on a fresh `origin/main`, that the item's row still has no number and isn't `ready`: if it does, someone else marked it ready, so stop and tell the user. A number must be unused on `main` and in every ticket and reservation branch on `origin`:
+In the commands below, `$title` is the item's title exactly as it is in its row on `main` (for a linked title, the text inside `[…]`), and `$slug` is the doc's name without `.md`. If any command fails, stop and tell the user: a check that couldn't run hasn't passed.
+
+1. **Check the item and find the next free number.** On a fresh `origin/main`, the item's row must still have no number and not be `ready`. If it has one, someone else marked it ready: stop and tell the user. The number must be unused on `main` and in every ticket and reservation branch on `origin`:
 
    ```sh
-   git fetch -q origin
+   git fetch -q origin &&
+   heads=$(git ls-remote --heads origin) &&
    max=$({
      git show origin/main:docs/backlog/README.md | awk -F'|' '$2 ~ /^ *[0-9][0-9][0-9] *$/ { print $2 }'
      git ls-tree -r --name-only origin/main docs/features/ | sed -nE 's#.*/([0-9]{3})-.*#\1#p'
-     git ls-remote --heads origin | sed -nE 's#.*refs/heads/(ready-)?([0-9]{3})(-.*)?$#\2#p'
-   } | tr -d ' ' | sort -n | tail -1)
-   n=$(printf '%03d' "$(expr "${max:-0}" + 1)")
+     printf '%s\n' "$heads" | sed -nE 's#.*refs/heads/(ready-)?([0-9]{3})(-.*)?$#\2#p'
+   } | tr -d ' ' | sort -n | tail -1) &&
+   n=$(printf '%03d' "$(expr "${max:-0}" + 1)") && echo "$n"
    ```
-
-   If `git ls-remote` fails, stop: without it, the number isn't known to be free.
-2. **Commit the refinement,** if you haven't: the doc changes from steps 1 to 8, in one commit, `docs(repo): refine <title>`. That way the ready commit, next, is the only one to undo if the number is taken.
+2. **Commit the refinement** changes not committed yet (`docs(repo): refine <title>`). Then the ready commit, next, is the only one to undo if the number turns out to be taken.
 3. **Make the ready commit,** on the refinement branch, renamed `git branch -m "ready-$n"`:
-   - `git mv docs/backlog/<slug>.md "docs/backlog/$n-<slug>.md"`
+   - `git mv "docs/backlog/$slug.md" "docs/backlog/$n-$slug.md"`
    - in the doc, set its status line to `ready`, with the date
    - in the row: the number in the `#` column, the new link, and the status `ready`
-   - fix any other links to the old path (`grep -rn '<slug>.md' docs AGENTS.md .agents`)
+   - fix any other links to the old path (`grep -rn "$slug.md" docs AGENTS.md .agents`)
    - one commit, `docs(repo): mark <title> ready as ticket NNN`
-4. **Reserve the number:** push create-only, and check that `origin` has *your* commit:
+4. **Reserve the number.** Push create-only, and check that `origin` has *your* commit:
 
    ```sh
-   git push --force-with-lease="refs/heads/ready-$n:" origin "HEAD:refs/heads/ready-$n"
-   [ "$(git ls-remote origin "refs/heads/ready-$n" | cut -f1)" = "$(git rev-parse HEAD)" ]
+   git push --force-with-lease="refs/heads/ready-$n:" origin "HEAD:refs/heads/ready-$n" &&
+   [ "$(git ls-remote origin "refs/heads/ready-$n" | cut -f1)" = "$(git rev-parse HEAD)" ] && echo reserved
    ```
 
-   If the push is rejected because `ready-$n` already exists, another refinement holds that number. Undo the ready commit with `git reset --hard HEAD^`, go back to 1, and use the number it gives now. If `origin` can't be reached, stop and tell the user: the number is reserved only if the check passes.
-
-   Then check that **no other ready PR is for the same item.** A number is unique, but two agents could refine the same item and reserve two numbers for it. List every other `ready-*` branch on `origin` that changes this item's doc:
+   If the push is rejected because `ready-$n` already exists, another refinement holds that number: undo the ready commit with `git reset --hard HEAD^`, and go back to 1. If `origin` can't be reached, stop and tell the user.
+5. **Check that the number didn't just reach `main`.** A ready PR's branch is deleted when it merges, so a number can be on `main` with no branch holding it any more. If another ready PR for `$n` merged after step 1, your push still succeeded:
 
    ```sh
-   for b in $(git ls-remote --heads origin 'ready-*' | sed 's#.*refs/heads/##'); do
+   git fetch -q origin &&
+   { git show origin/main:docs/backlog/README.md | awk -F'|' '{ gsub(/ /, "", $2) } $2 == n' n="$n"
+     git ls-tree -r --name-only origin/main docs/features/ | grep "/$n-"; } | grep -q . && echo "taken on main"
+   ```
+
+   If it prints `taken on main`, delete your own reservation (`git push origin --delete "ready-$n"`: it holds your commit, as step 4 checked), undo the ready commit, and go back to 1. Once your branch exists, no other refinement can take `$n`, and a later merge of `$n` can only come from your PR, so this check doesn't need repeating.
+6. **Check that no other ready PR is for the same item.** A number is unique, but two agents could refine the same item and reserve a number each. Look in every other `ready-*` branch for a change to this item's row, compared with where that branch started from `main`:
+
+   ```sh
+   git fetch -q origin &&
+   heads=$(git ls-remote --heads origin 'ready-*') &&
+   for b in $(printf '%s\n' "$heads" | sed -n 's#.*refs/heads/##p'); do
      [ "$b" = "ready-$n" ] && continue
-     git fetch -q origin "$b" &&
-       git diff --name-only origin/main FETCH_HEAD -- "docs/backlog/<slug>.md" | grep -q . &&
-       echo "$b"
+     git fetch -q origin "$b" && base=$(git merge-base origin/main FETCH_HEAD) || { echo "error: $b"; break; }
+     git diff "$base" FETCH_HEAD -- docs/backlog/README.md | grep '^-|' |
+       grep -qF -e "[$title](" -e "| $title |" && echo "same item: $b"
    done
    ```
 
-   If it prints a branch, don't open the PR. Tell the user both branches exist and let them choose which to keep. Never delete the other agent's branch. Because each agent checks after its own push, two agents racing on one item can't both miss each other: at worst, both stop and ask.
-5. **Open the PR** from `ready-$n` to `main`, with a Conventional Commits title like the commit's. The body says which ticket, the number and how it was chosen, and links the Readiness review section. End with the attribution line. Link the PR in T3 Code if that tool is available.
-6. **Take it through review** like any PR (see `next-ticket`, step 4). The user merges it. Never merge it yourself. Once it's merged, `scripts/ticket.sh list` shows the ticket as `ready`.
+   The row is the item's one stable mark: a refinement may create the doc or rename it, but every ready PR changes the row's number and status. If it prints `same item` or `error`, don't open the PR. Tell the user, and let them choose which branch to keep. Never delete another agent's branch. Each agent checks after its own push, so two racing on one item can't both miss each other: at worst, both stop and ask.
+7. **Open the PR** from `ready-$n` to `main`, with a Conventional Commits title like the commit's. The body says which ticket, the number and how it was chosen, and links the Readiness review section. End with the attribution line. Link the PR in T3 Code if that tool is available.
+8. **Take it through review** like any PR (see `next-ticket`, step 4). The user merges it. Never merge it yourself. Once it's merged, `scripts/ticket.sh list` shows the ticket as `ready`.
 
 ## The Readiness review section
 

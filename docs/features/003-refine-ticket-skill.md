@@ -1,6 +1,6 @@
 # A skill that gets a ticket ready to build
 
-Status: **implemented**, ticket 003. The skill is [`.agents/skills/refine-ticket/SKILL.md`](../../.agents/skills/refine-ticket/SKILL.md), and its reviewer prompt is [`review-prompt.md`](../../.agents/skills/refine-ticket/review-prompt.md) beside it.
+Status: **built, with acceptance checks 2 and 3 still to run** (they need the user), ticket 003. The skill is [`.agents/skills/refine-ticket/SKILL.md`](../../.agents/skills/refine-ticket/SKILL.md), and its reviewer prompt is [`review-prompt.md`](../../.agents/skills/refine-ticket/review-prompt.md) beside it.
 
 ## Summary
 
@@ -59,12 +59,12 @@ The user asks an agent to refine an item, for example "refine the delete-expired
    - backs each finding with evidence, such as the file and line it relies on, or a command and its output. A finding without evidence is dropped, and the report says how many were dropped and why.
    - only reads, and doesn't edit. The refining agent makes the changes.
 
-   Each reviewer gets the same prompt, `review-prompt.md` in the skill's folder, and runs as a separate CLI process, in a read-only mode:
+   Each reviewer gets the same prompt, `review-prompt.md` in the skill's folder, and runs as a separate CLI process in a **review copy**: a throwaway clone of the refinement branch, in a scratch directory, with its remote removed. It has only committed files, so none of the ignored ones such as `server/.env` or the development database, and nothing to push to. Each CLI also runs in a read-only mode:
    - **Codex:** `codex exec -s read-only -c approval_policy='"never"' --ephemeral`. The `approval_policy` override is needed: with a user config of `approval_policy = "on-request"` and `approvals_reviewer = "auto_review"`, Codex asked to leave the read-only sandbox, its automatic approver said yes, and it wrote files. With `never`, the sandbox held.
-   - **opencode:** `opencode run --agent plan`. The built-in `plan` agent can't edit files.
-   - **Claude Code:** `claude -p --permission-mode plan`.
+   - **opencode:** `opencode run --agent plan`, with `opencode-reviewer.json` from the skill's folder copied into the clone as `opencode.json`. The built-in `plan` agent only denies edits, and allows every shell command. The project config overrides user settings: it denies edits and web fetches, and allows only `git log`, `git show`, `git diff`, `git grep`, `grep`, and `ls` in the shell. `opencode debug agents` shows the merged rules.
+   - **Claude Code:** `claude -p --permission-mode plan --disallowedTools Edit Write NotebookEdit`.
 
-   After each round, the skill checks `git status`, and undoes and drops any reviewer that changed something.
+   After each round, the skill checks that `git status --porcelain --ignored` in the clone and in the checkout, and the branches on `origin`, are as before. If anything changed, it stops and tells the user. Those checks only confirm the read-only modes: they can't see changes outside the repo.
 
    Each finding is fixed in the doc, or answered with the reason it stays, just like a PR finding. Fixes that need a decision go back to the user through step 6. After the fixes, the next round runs. After three rounds with findings still coming, the skill stops and asks the user.
 8. **Asks the user for approval.** When the doc passes the checklist and the review has nothing left, the skill shows the user:
@@ -80,7 +80,11 @@ The user asks an agent to refine an item, for example "refine the delete-expired
    1. Take one more than the highest number used in `main`'s backlog table, in `docs/features/`, and in the names of all `NNN-*` and `ready-NNN` branches on `origin`.
    2. Push the branch create-only (`--force-with-lease=refs/heads/ready-NNN:`), and check that `origin` has this commit, as `scripts/ticket.sh claim` does.
    3. If another refinement got there first, take the next number and try again.
-   4. Before step 1, check on a fresh `main` that the item still has no number. After the push, check that no other `ready-*` branch changes the same item's doc. If one does, two agents refined the same item: the skill doesn't open the PR, and asks the user which to keep. Each agent checks after its own push, so two racing on one item can't both miss each other.
+   4. Before step 1, check on a fresh `main` that the item still has no number.
+   5. After the push, check that `$n` isn't on `main` now. A ready PR's branch is deleted when it merges, so another PR for the same number could have merged after step 1, and then the push still succeeds. If it's taken, the skill deletes its own reservation and starts over. After the reservation exists, `$n` can only reach `main` through this PR.
+   6. Then check that no other `ready-*` branch changes the same item's **row**, diffed from where that branch left `main`. The row is the item's stable mark: a refinement may create the item's doc or rename it, but every ready PR changes the row's number and status. If one does, two agents refined the same item: the skill doesn't open the PR, and asks the user which to keep. Each agent checks after its own push, so two racing on one item can't both miss each other.
+
+   Any command that fails stops the skill: a check that couldn't run hasn't passed.
 
    The refinement's doc changes are one commit, and the ready edit is a second commit on top, so a lost race undoes only the second. The skill's step 9 has the exact commands. Until `scripts/ticket.sh ready` exists (see the backlog), the skill follows these steps by hand. Once it exists, the command does them. If the user says no, or asks for changes, the skill keeps the doc `designed`, makes the changes, and goes back to step 4. If the user wants to stop there, the skill asks whether to open a PR with the doc changes, status still `designed`, on `refine-<slug>`, and pushes it only on a yes.
 
@@ -111,7 +115,8 @@ That way, a ticket's history shows why it was considered ready. Item 9 of "Writi
 
   A probe that would need any of these is a question for the user instead.
 - Only the user's approval leads to `ready`, and only the user's merge puts it on `main`. The backlog's "Who sets it" column changes from "The user, in a PR to `main`" to "The user decides. An agent may make the edit after the user approves, in a PR the user merges." `AGENTS.md`'s "Only the user marks tickets `ready`" changes the same way.
-- The independent reviewers run read-only (see step 7 for how each CLI is held to it): they report findings, and the refining agent makes the edits.
+- The independent reviewers run read-only, in a review copy with no remote and no ignored files (see step 7 for how each CLI is held to it): they report findings, and the refining agent makes the edits.
+- **Known gap:** a reviewer runs as the user, so it can still *read* files outside the review copy, such as the home directory. The read-only modes stop writes, not reads.
 
 ## Prior art
 
@@ -135,6 +140,7 @@ One idea is deliberately not taken: Matt Pocock's specs and briefs leave out fil
 
 - `.agents/skills/refine-ticket/SKILL.md`: the skill, steps 0 to 9, the Readiness review template, and the limits on probes. It follows the Skills section of `AGENTS.md`: Claude Code finds it through the `.claude/skills` symlink, and Codex and opencode read it directly. It uses the `grilling` skill for step 6.
 - `.agents/skills/refine-ticket/review-prompt.md`: the prompt each independent reviewer gets, with placeholders for the doc's path and the earlier rounds.
+- `.agents/skills/refine-ticket/opencode-reviewer.json`: the opencode project config copied into each review copy, which limits the `plan` agent to reading.
 - `.agents/skills/grilling/`: added in PR #8, with the backlog item.
 - `docs/backlog/README.md`:
   - a "Definition of Ready" section
@@ -210,4 +216,11 @@ Built on branch `003-refine-ticket-skill`, claimed with `scripts/ticket.sh claim
 **Review (PR #10):**
 - Qodo, "Ready tickets can reuse old numbers": it said `git ls-tree --name-only origin/main docs/features/` doesn't list the files inside the folder. It does, with the trailing slash (it printed `docs/features/001-accounts.md` and `002-rate-limiting.md`). But the command now uses `-r`, so it doesn't depend on the slash. Tested on a scratch remote where the highest number, 005, was only in `docs/features/`: the result was 005.
 - Qodo, "Two refinements can ready one ticket": correct. The `ready-NNN` branch reserves a number, not an item, so two agents refining one item could both open ready PRs. Fixed: step 9 checks that the item is still unnumbered on a fresh `main`, and after the push, lists other `ready-*` branches that change the item's doc, stopping to ask the user if there's one. Tested on a scratch remote: with `ready-006` for the same item and `ready-007` for another, it printed only `ready-006`.
-- Rules, skills, or reviewer context: nothing to change.
+- Qodo's second pass (on `c36173a`) found four more. I missed three of them at the next check, because they were only in Qodo's summary comment, not inline:
+  - "New ideas can get competing ready PRs": correct. An idea has no doc on `main`, so a diff of `docs/backlog/<slug>.md` found nothing. Fixed: the check looks for a change to the item's **row**, by its title. Tested: a `ready-004` that created a new doc for the idea "Foo idea" was found.
+  - "A remote error can hide a competing ticket": correct. Fixed: every command in step 9 is chained with `&&`, and a failed fetch prints `error: <branch>` and stops the check. Tested with a `git` wrapper that fails one fetch.
+  - "An unrelated ready ticket blocks a PR": correct. Comparing with today's `main` blamed `main`'s own edits on the branch. Fixed: the diff starts at the branch's merge base. Tested: an older `ready-005` for another item wasn't flagged after `main` edited the item's row.
+  - "A user config can let the opencode reviewer write files": correct. The `plan` agent allows every shell command (`opencode debug agents` shows `shell` allowed). An `OPENCODE_CONFIG_CONTENT` override wasn't picked up by opencode 2.2.7, but a project `opencode.json` was. Fixed: the review copy described in step 7, with the opencode config, and the before-and-after checks with `--ignored` and the branches on `origin`.
+  - "Concurrent refinements can reuse a number": correct. A merged ready PR's branch is deleted, so a stale number could be pushed again. Fixed: step 9.5 checks `main` after the push. Tested: with 004 merged and its branch deleted, it printed `taken on main`. Qodo suggested permanent reservation refs. The check after the push is simpler, and closes the same gap, because once the reservation exists, only this PR can bring its number to `main`.
+  - "Ticket 003 is listed as implemented before its main checks run": correct. Fixed: the status line and the Features table say checks 2 and 3 are still to run.
+- Rules, skills, or reviewer context: the follow-up check should read Qodo's summary comment as well as its inline comments. That's a working habit, saved in Claude's notes, not a repo rule.
