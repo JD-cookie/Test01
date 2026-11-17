@@ -23,7 +23,7 @@ Work on a new local branch from an up-to-date `main`: `git fetch origin && git s
 
 Read the backlog row, the design doc if there is one, `AGENTS.md`, `docs/README.md`, the feature docs and the code the item touches, and `docs/devops.md` if it's operational.
 
-For an `idea` with no design doc, write a first draft at `docs/backlog/<slug>.md`, with the feature doc sections ("Writing a feature doc" in `docs/README.md`), and link the row to it. Fill in what's known, and mark what isn't as open. Then go on.
+An `idea` may have no design doc yet. Its draft comes after step 3, once you know the work is needed.
 
 ## 2. Restate the goal
 
@@ -36,6 +36,8 @@ In a few sentences, in your own words: who it's for, what problem it solves, and
 - **Dropped before?** Look in the backlog's history for a dropped item like it: `git log -p --follow -- docs/backlog/README.md`, and search the commit messages, which say why an item was dropped.
 
 If any of these turns up something, report it with where, and ask the user whether to go on.
+
+**No design doc yet?** Once the work is needed, write a first draft at `docs/backlog/<slug>.md`, with the feature doc sections ("Writing a feature doc" in `docs/README.md`). Fill in what's known, and mark what isn't as open. Link the row's title to it, and set the row to `designed`.
 
 ## 4. Check the Definition of Ready
 

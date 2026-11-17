@@ -1,6 +1,6 @@
 # A skill that gets a ticket ready to build
 
-Status: **ready** (marked by the user, 2026-11-17), ticket 003. It moves to `docs/features/` in the PR that builds it.
+Status: **implemented**, ticket 003. The skill is [`.agents/skills/refine-ticket/SKILL.md`](../../.agents/skills/refine-ticket/SKILL.md), and its reviewer prompt is [`review-prompt.md`](../../.agents/skills/refine-ticket/review-prompt.md) beside it.
 
 ## Summary
 
@@ -31,7 +31,7 @@ Each would have been cheaper to catch before the ticket was ready to build.
 
 The user asks an agent to refine an item, for example "refine the delete-expired-sessions ticket". The skill then:
 
-1. **Reads** the backlog row, the design doc, `AGENTS.md`, `docs/README.md`, the feature docs and code the item touches, and `docs/devops.md` if it's operational. For an `idea` with no doc, it writes a first draft of the doc with the feature doc sections (see [../README.md](../README.md#writing-a-feature-doc)), then continues.
+1. **Reads** the backlog row, the design doc, `AGENTS.md`, `docs/README.md`, the feature docs and code the item touches, and `docs/devops.md` if it's operational. For an `idea` with no doc, it writes a first draft of the doc with the feature doc sections (see [../README.md](../README.md#writing-a-feature-doc)) once step 3 shows the work is needed, and sets the row to `designed`. It works on a local branch, `refine-<slug>`, from an up-to-date `main`, and asks first if the checkout has changes. It doesn't push that branch.
 2. **Restates the goal in its own words.** In a few sentences: who it's for, what problem it solves, and the smallest change that would solve it. This opens the report, so the user can see at once whether the skill understood the item.
 3. **Checks that the work is needed:**
    - **Already built?** It searches the code and the feature docs by concept, not just by the item's wording, and reports where it looked.
@@ -40,8 +40,7 @@ The user asks an agent to refine an item, for example "refine the delete-expired
 
    If any of these turns up something, the skill reports it and asks the user whether to go on.
 4. **Checks the doc against the Definition of Ready** (below). It notes each item as pass, fail, or not applicable, with a reason.
-5. **Settles what's open.** It finds the facts itself: it reads the code, or runs a quick probe or prototype when only running something can tell. It then interviews the user about the remaining decisions with the `grilling` skill, in rounds, and waits for the answers. It writes each answer into the doc: in the section it belongs to, and in "Decisions made for this ticket" if it was a choice. It never guesses at anything that changes the scope or the behavior.
-6. **Proposes a split** if the item fails the size check. The parts are **vertical slices**, in the style of Matt Pocock's `to-tickets`:
+5. **Proposes a split** if the item fails the size check, before settling the other decisions, because those are asked for each part once it's its own item. If the size depends on a decision, it asks that one first. The parts are **vertical slices**, in the style of Matt Pocock's `to-tickets`:
    - Each part delivers a narrow behavior end to end, through every layer it needs (data, API, app, tests). It can be shipped and checked on its own, not as one layer of the whole.
    - Each part fits in one agent session.
    - Any restructuring of existing code that makes the work easier comes first, as its own part.
@@ -49,6 +48,7 @@ The user asks an agent to refine an item, for example "refine the delete-expired
    - Each part names the parts that block it.
 
    The skill shows the proposed parts as a numbered list, each with a title, what it delivers, and what blocks it. It asks the user whether the size is right and the blocking is correct, and changes it until the user agrees. Then each part becomes its own backlog item, with "Blocked by: …" at the start of its Notes, and the skill refines each one separately.
+6. **Settles what's open.** It finds the facts itself: it reads the code, or runs a quick probe or prototype when only running something can tell. It then interviews the user about the remaining decisions with the `grilling` skill, in rounds, and waits for the answers. It writes each answer into the doc: in the section it belongs to, and in "Decisions made for this ticket" if it was a choice. It never guesses at anything that changes the scope or the behavior.
 7. **Gets an independent review.** Each reviewer is a fresh agent that gets the doc and the repo, with none of this conversation's context.
    - **Round 1 has two reviewers,** run separately so neither sees the other's report. Where they're available, they're the two agents that didn't refine the doc: for a doc refined by Claude Code, Codex and opencode. With only one other agent, the second reviewer is a fresh session of the refining agent's own model. Two reviewers find more than one, and the round shows which one is more useful for this ticket, rather than the skill picking one up front.
    - **Later rounds have one reviewer:** a fresh session of the round-1 reviewer whose findings were the most useful, meaning the most findings kept (fixed in the doc, or turned into a question for the user) rather than answered or dropped. It also gets the previous rounds' findings and what was done about each, so it can check the fixes as well as look for new gaps. If the two were about even, the skill asks the user which to keep.
@@ -59,7 +59,14 @@ The user asks an agent to refine an item, for example "refine the delete-expired
    - backs each finding with evidence, such as the file and line it relies on, or a command and its output. A finding without evidence is dropped, and the report says how many were dropped and why.
    - only reads, and doesn't edit. The refining agent makes the changes.
 
-   Each finding is fixed in the doc, or answered with the reason it stays, just like a PR finding. Fixes that need a decision go back to the user through step 5. After the fixes, the next round runs. After three rounds with findings still coming, the skill stops and asks the user.
+   Each reviewer gets the same prompt, `review-prompt.md` in the skill's folder, and runs as a separate CLI process, in a read-only mode:
+   - **Codex:** `codex exec -s read-only -c approval_policy='"never"' --ephemeral`. The `approval_policy` override is needed: with a user config of `approval_policy = "on-request"` and `approvals_reviewer = "auto_review"`, Codex asked to leave the read-only sandbox, its automatic approver said yes, and it wrote files. With `never`, the sandbox held.
+   - **opencode:** `opencode run --agent plan`. The built-in `plan` agent can't edit files.
+   - **Claude Code:** `claude -p --permission-mode plan`.
+
+   After each round, the skill checks `git status`, and undoes and drops any reviewer that changed something.
+
+   Each finding is fixed in the doc, or answered with the reason it stays, just like a PR finding. Fixes that need a decision go back to the user through step 6. After the fixes, the next round runs. After three rounds with findings still coming, the skill stops and asks the user.
 8. **Asks the user for approval.** When the doc passes the checklist and the review has nothing left, the skill shows the user:
    - the goal, restated
    - the checklist results
@@ -74,35 +81,13 @@ The user asks an agent to refine an item, for example "refine the delete-expired
    2. Push the branch create-only (`--force-with-lease=refs/heads/ready-NNN:`), and check that `origin` has this commit, as `scripts/ticket.sh claim` does.
    3. If another refinement got there first, take the next number and try again.
 
-   Until `scripts/ticket.sh ready` exists (see the backlog), the skill follows these steps by hand. Once it exists, the command does them. If the user says no, or asks for changes, the skill keeps the doc `designed`, makes the changes, and goes back to step 4.
+   The refinement's doc changes are one commit, and the ready edit is a second commit on top, so a lost race undoes only the second. The skill's step 9 has the exact commands. Until `scripts/ticket.sh ready` exists (see the backlog), the skill follows these steps by hand. Once it exists, the command does them. If the user says no, or asks for changes, the skill keeps the doc `designed`, makes the changes, and goes back to step 4. If the user wants to stop there, the skill asks whether to open a PR with the doc changes, status still `designed`, on `refine-<slug>`, and pushes it only on a yes.
 
 At any step, the user can stop. The doc keeps whatever was settled so far, and the status stays `designed`.
 
 ## The Definition of Ready
 
-Added as a section of `docs/backlog/README.md`. A ticket is ready when:
-
-1. **Purpose:** the summary says what problem it solves, for whom, and what changes for users or operators. It also says what doesn't change. For a change to existing behavior, it states the current behavior and the behavior wanted.
-2. **Needed:** it isn't already built, and it doesn't repeat or contradict another backlog item or something dropped before.
-3. **Scope:** what's in and what's out is explicit, including an out-of-scope list for anything nearby that a builder might be tempted to include. Anything left for later is a separate backlog row or a known gap, not a vague "maybe".
-4. **Fits one PR:** one branch, one reviewable PR, one behavior change that can ship on its own, and small enough for one agent session. A rough guide: if the implementation map touches more than about three areas (app, server, CI, infra), or the acceptance checks fall into groups that could each ship alone, split it.
-5. **Enough information to build it without asking:**
-   - every endpoint, table, setting, message, and error code it adds or changes, with exact values
-   - the files in the implementation map exist, or are clearly new files
-   - links to the feature docs it changes
-   - the backlog items that block it, if any
-6. **Steps only the user can do** are listed as tasks for the user: settings, secrets, rulesets, accounts, and anything else an agent can't do. For each one, the doc says when it has to happen (before the PR is merged, or after it ships) and how the builder can check that it's done.
-7. **Acceptance checks:** each one is a concrete scenario, with an input or setup and an observable expected result. They cover the failure paths and edge cases, not just the happy path. No check uses words like "works", "fast", or "secure" without saying what's measured. Each check also says:
-   - **where it's tested:** the highest existing entry point that can test it, such as the HTTP API through Fastify's `inject`, the claim script run against a scratch repo, a CI job, or the app on a device
-   - **what shows it passed:** something other than the builder's word, such as a test, a CI job's result, or a command and its output
-8. **The project's rules** (`AGENTS.md`) are addressed where they apply. For example:
-   - attempt limits (rule 1)
-   - more than one instance (rule 2): shared state, and migrations or jobs run by several instances at once
-   - docs updated in the same PR (rule 3)
-   - versions left to release-please (rule 4)
-   - workflow permissions and triggers (rule 5)
-9. **Security and failure modes:** who can trigger it, what happens when a dependency is down, and what's logged. It also lists the known gaps.
-10. **No open questions.** Choices are written down in "Decisions made for this ticket", with the reason for each.
+The list is in [`docs/backlog/README.md`](../backlog/README.md#definition-of-ready), its only copy, so that people, the skill, and reviewers all use the same one. It has 10 items: purpose, needed, scope, fits one PR, enough information to build it without asking, steps only the user can do, acceptance checks (each with where it's tested and what shows it passed), the project's rules, security and failure modes, and no open questions. The skill marks each one pass, fail, or not applicable, with a reason.
 
 ## Readiness review section
 
@@ -125,7 +110,7 @@ That way, a ticket's history shows why it was considered ready. Item 9 of "Writi
 
   A probe that would need any of these is a question for the user instead.
 - Only the user's approval leads to `ready`, and only the user's merge puts it on `main`. The backlog's "Who sets it" column changes from "The user, in a PR to `main`" to "The user decides. An agent may make the edit after the user approves, in a PR the user merges." `AGENTS.md`'s "Only the user marks tickets `ready`" changes the same way.
-- The independent reviewers get read-only access: it reports findings, and the refining agent makes the edits.
+- The independent reviewers run read-only (see step 7 for how each CLI is held to it): they report findings, and the refining agent makes the edits.
 
 ## Prior art
 
@@ -147,8 +132,9 @@ One idea is deliberately not taken: Matt Pocock's specs and briefs leave out fil
 
 ## Implementation map
 
-- `.agents/skills/refine-ticket/SKILL.md`: the skill. It follows the Skills section of `AGENTS.md`: Claude Code finds it through the `.claude/skills` symlink, and Codex and opencode read it directly. It calls the `grilling` skill for step 5.
-- `.agents/skills/grilling/`: already added, in the PR that added this backlog item. Nothing to build.
+- `.agents/skills/refine-ticket/SKILL.md`: the skill, steps 0 to 9, the Readiness review template, and the limits on probes. It follows the Skills section of `AGENTS.md`: Claude Code finds it through the `.claude/skills` symlink, and Codex and opencode read it directly. It uses the `grilling` skill for step 6.
+- `.agents/skills/refine-ticket/review-prompt.md`: the prompt each independent reviewer gets, with placeholders for the doc's path and the earlier rounds.
+- `.agents/skills/grilling/`: added in PR #8, with the backlog item.
 - `docs/backlog/README.md`:
   - a "Definition of Ready" section
   - a link to the skill next to the `next-ticket` link
@@ -158,6 +144,7 @@ One idea is deliberately not taken: Matt Pocock's specs and briefs leave out fil
   - in "Marking it ready", the `ready-NNN` branch that reserves the number
 - `docs/README.md`: item 9 of "Writing a feature doc", **Readiness review**.
 - `AGENTS.md`: the `refine-ticket` skill in "Backlog tickets", the updated rule about who marks tickets `ready`, and the Definition of Ready as context for reviewers.
+- `.agents/skills/next-ticket/SKILL.md`: "don't mark anything `ready` yourself" now points to `refine-ticket`.
 
 ## Acceptance checks
 
@@ -192,3 +179,31 @@ Change these before marking it ready if you disagree:
 - **Two reviewers in round 1, then the more useful one** (suggested by the user, 2026-11-17). With Claude Code, Codex, and opencode set up, the two agents that didn't refine the doc can both review it, so there's no need to guess which one will do better. Later rounds mostly check the fixes, and one reviewer is enough for that.
 - **A different model for the independent review where possible.** It's not required: a fresh agent of the same model with no shared context is still independent.
 - **File paths stay in the implementation map,** unlike Matt Pocock's briefs. See "Prior art".
+- **A split comes before the interview** (decided while building, 2026-11-17). The design had the interview first. For an item that's too big, that asks questions that belong to the parts, so the skill now proposes the split first and asks only the decisions the size depends on.
+- **An idea's first draft comes after the "is it needed" checks** (found in a test run, 2026-11-17). Drafting a doc for something already built is wasted work, and it would be deleted with the row.
+- **The refinement and the ready edit are two commits** (decided while building). A lost race for a number then undoes only the ready commit.
+- **The refinement branch stays local** unless the user approves: it's pushed as `ready-NNN`, or, if the user stops, as `refine-<slug>` only on a yes. That keeps acceptance check 9 true: `origin` gets no branch other than `ready-NNN` without the user's say.
+
+## Delivery and review
+
+Built on branch `003-refine-ticket-skill`, claimed with `scripts/ticket.sh claim next` (claim `37dc4f12`).
+
+**Acceptance checks:**
+1. **Pass.** `claude -p`, `codex exec`, and `opencode run`, each asked in the repo which skills they have, listed `grilling`, `next-ticket`, and `refine-ticket`.
+2. **Not yet run.** It needs the user to answer the interview and the approval question. Planned: a real refinement of "Delete expired session rows", with Codex and opencode as the round-1 reviewers.
+3. **Not yet run.** Needs the user to say no, as in check 2.
+4. **Partly done:** the ready PR's steps were followed by hand for this ticket itself (PR #9), and `scripts/ticket.sh list` then showed `003-refine-ticket-skill  ready`. A run where the skill opens the PR follows from check 2.
+5. **Pass.** A fresh `claude -p` session ran the skill on "Password reset", an `idea` with no doc, in a throwaway clone with a local bare `origin`. It wrote `docs/backlog/password-reset.md` with the feature doc sections, linked the row, and stopped to ask about an overlap it found: "Email verification" needs the same email sending.
+6. **Pass,** up to the user's agreement. On a made-up "OpenTelemetry for the server and the app", the skill first found that it overlapped the existing "OpenTelemetry" row and asked to merge them. Told yes (`claude -p --continue`), it ran the Definition of Ready, found "Fits one PR" failed, and proposed five vertical slices (server traces; server metrics; server logs; app traces; dashboards and alerts), each with what it delivers and "Blocked by", then asked whether the size and blocking are right.
+7. **Pass.** Two clones of a local bare `origin` both computed 004 with the step 9 commands. The first push of `ready-004` succeeded, the second was rejected, and on retry the second clone got 005. A `007-*` branch on `origin` made the next number 008.
+8. **Pass.** On a made-up "Let users log out", the skill reported it's built in feature 001, citing `docs/features/001-accounts.md`, `server/src/app.ts`, `server/test/auth.test.ts`, and `app/src/session.tsx`, and asked whether to drop the row.
+9. **Pass** for the three test runs: `git status` in each clone showed only doc changes, and the bare `origin` had no new branches.
+10. **Pass so far:** none of the runs set a status to `ready` or opened a PR. Check 2 tests it with a real approval.
+11. **Pass.** `docs/backlog/README.md` has the Definition of Ready, the "Refining it" step, the `ready-NNN` reservation, and the "Blocked by" convention. `AGENTS.md`, the backlog's "Who sets it" column, and `next-ticket` all say the user decides and an agent may make the edit only after the user approves, in a PR the user merges.
+
+**Found while building:**
+- **Codex left its read-only sandbox.** With the user's `~/.codex/config.toml` (`approval_policy = "on-request"`, `approvals_reviewer = "auto_review"`), `codex exec -s read-only` asked to escalate, its automatic approver allowed it, and it wrote files in a scratch repo. With `-c approval_policy="never"`, the write was refused. The skill's reviewer command includes it. opencode's `plan` agent and `claude -p --permission-mode plan` both refused to write.
+- **The split comes before the interview,** and an idea's draft doc comes after the "is it needed" checks. See "Decisions made for this ticket".
+- `gh pr list` fails in a clone whose `origin` is a local path, so test runs can't check open PRs. A real run in the checkout can.
+
+**Review:** to be filled in from the PR's review.
