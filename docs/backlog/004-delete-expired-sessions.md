@@ -1,6 +1,6 @@
 # Delete expired session rows
 
-Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNN-delete-expired-sessions.md`. It moves to `docs/features/` in the PR that builds it.
+Status: **ready**, 2026-11-18, as ticket 004. It moves to `docs/features/` in the PR that builds it.
 
 ## Summary
 
