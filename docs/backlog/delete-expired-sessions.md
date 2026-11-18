@@ -77,7 +77,8 @@ None. No settings, secrets, or accounts are needed.
 ## Implementation map
 
 - `server/src/db.ts`: migration 2 (the index), and the runner's `BEGIN IMMEDIATE` with the `user_version` recheck and the busy timeout.
-- `server/src/app.ts` (or a small `server/src/sessions.ts`): `deleteExpiredSessions(db, now): number`, which returns the number of rows deleted. Plus the startup sweep, the hourly timer, and clearing it in the existing `onClose` hook.
+- `server/src/sessions.ts` (new): `deleteExpiredSessions(db, now): number`, which returns the number of rows deleted, and `SWEEP_INTERVAL_MS` (one hour).
+- `server/src/app.ts`: in `buildApp`, the startup sweep, the hourly timer (`setInterval`, then `unref`), and clearing the timer in the existing `onClose` hook, before `db.close()`.
 - `server/test/`: tests for the acceptance checks below.
 
 ## Acceptance checks
@@ -95,3 +96,11 @@ Checks 1 to 7 are `node:test` tests in `server/test/sessions.test.ts`, through `
 7. **Upgrade:** opening a file database at version 1 (made with migration 1 only) applies migration 2: `PRAGMA user_version` becomes 2, and `sqlite_master` lists the index `sessions_expires_at`.
 8. **Two processes migrating at once:** on a file database at version 1, the test takes the write lock with `BEGIN IMMEDIATE` on its own connection, starts two child processes that each call `openDb` on the file, and commits after 500 ms. Both children exit with code 0, and the database is at version 2 with the index. Run against today's runner, both children fail with `database is locked` (see the probe under "Data model"), so this check can fail. It's in `server/test/sessions.test.ts` too, and passes the same way.
 9. `npm run check` passes locally and in CI. The 001 doc no longer lists this as a gap, and `docs/devops.md`'s migrations section describes the lock, the recheck, and the busy timeout.
+
+## Decisions made for this ticket
+
+Decided by the user on 2026-11-18, in the refinement:
+- **The migration runner's fix is part of this ticket.** Migration 2 is the first one that runs on a database that already exists, so without the fix, two processes starting at once can fail (see "Data model"). It's small, and it ships with the migration that needs it.
+- **Sweep at startup, then every hour, with a fixed interval and no setting.** The table grows by one row per login, so an hour is plenty, and a setting would be one more thing to document and test for no gain.
+- **Delete rows as soon as they expire, with no grace period.** Nothing reads expired rows: login and `/me` already reject them, and there's no audit log that uses them.
+- **The sweep goes in a new `server/src/sessions.ts`,** not in `app.ts`, which is already about 300 lines. `buildApp` only starts and stops it.
