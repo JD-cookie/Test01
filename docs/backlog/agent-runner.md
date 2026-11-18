@@ -27,7 +27,7 @@ What doesn't change:
 - More than one ticket at a time, or more than one runner per machine.
 - Running in GitHub Actions or the cloud (see "Decisions made for this ticket").
 - Reviews by our own agents. That's its own backlog item: "Code reviews by our own agents".
-- Notifying the user outside GitHub (open question, see below).
+- Notifying the user outside GitHub. The user checks the `agent-run` PRs (see "Decisions made for this ticket").
 - Starting on a label or a push instead of a timer. A timer is enough for one ticket at a time.
 
 ## Concepts
@@ -133,7 +133,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/test01-agent/log
   - A crash mid-build: the next run finds a claim with no PR and stops for help.
 - **No new settings.** The interval, the limits, and the labels are constants at the top of `agent-run.sh`.
 - **Known gaps:**
-  - The runner comments as the user, so GitHub doesn't notify the user of its comments (see the open question).
+  - The runner comments as the user, so GitHub doesn't notify the user of its comments. The user checks the `agent-run` PRs instead.
   - The agent can run `npm` scripts, which can run any code in the repo, like the hooks and tests already do.
   - The time limit doesn't cap cost. `--max-budget-usd` only applies to API keys, and this uses the user's login.
 
@@ -172,10 +172,6 @@ Checks 1 to 9 are in `scripts/test/agent-run.test.sh`. It runs the runner agains
 11. **The real run** (Day 4 of the hackathon, with the user): with the timer installed and one small ticket `ready` ("Delete expired session rows"), the runner claims it, builds it, opens a PR that Qodo reviews, and runs rounds until it reports `Ready for review by the user.` or stops with `needs-help`. Shown by the PR, its comments, and the runner's logs. Record what happened in this doc's "Delivery and review": the checks, Qodo's findings, the rounds and retries, and where the user had to step in.
 12. `npm run check` passes locally and in CI, and `docs/devops.md` has the runner's section.
 
-## Open questions
-
-- **Notifying the user:** the runner comments as the user, so GitHub sends no notification, and this machine has no desktop to show one. Options: none (the user checks the `agent-run` PRs), or a push service such as ntfy, which is an outside service. To be decided in the refinement.
-
 ## Decisions made for this ticket
 
 Decided by the user on 2026-11-18:
@@ -185,3 +181,4 @@ Decided by the user on 2026-11-18:
 - **Only Qodo's and the repo owner's comments reach the agent,** because anyone can comment on a public repo.
 - **Claude Code (`claude -p`) in its own clone.** It never merges, never pushes (the runner does), and never touches `server/.env` or the development database.
 - **One ticket at a time, and the user starts the timer.**
+- **No notifications outside GitHub for now:** the user checks the PRs labeled `agent-run`. The runner comments as the user, so GitHub sends no notification, and this machine has no desktop. A push service such as ntfy was the other option, but it's an outside service.
