@@ -177,9 +177,12 @@ In the commands below, `$title` is the item's title exactly as it is in its row 
      git diff "$base" FETCH_HEAD -- docs/backlog/README.md | grep '^-|' |
        grep -qF -e "[$title](" -e "| $title |" && echo "same item: $b"
    done
+   row=$(git show origin/main:docs/backlog/README.md | grep -F -e "[$title](" -e "| $title |") ||
+     echo "error: no row on main"
+   printf '%s\n' "$row" | awk -F'|' '{ gsub(/ /, "", $2) } $2 != ""' | grep -q . && echo "same item: on main"
    ```
 
-   The row is the item's one stable mark: a refinement may create the doc or rename it, but every ready PR changes the row's number and status. If it prints `same item` or `error`, don't open the PR. Tell the user, and let them choose which branch to keep. Never delete another agent's branch. Each agent checks after its own push, so two racing on one item can't both miss each other: at worst, both stop and ask.
+   The row is the item's one stable mark: a refinement may create the doc or rename it, but every ready PR changes the row's number and status. The last three lines repeat step 1's check of the row on `main`: another ready PR for this item may have merged since then, and its branch is gone, so the loop can't see it. If it prints `same item` or `error`, don't open the PR. Tell the user, and let them choose which branch to keep. Never delete another agent's branch. Each agent checks after its own push, so two racing on one item can't both miss each other: at worst, both stop and ask.
 7. **Open the PR** from `ready-$n` to `main`, with a Conventional Commits title like the commit's. The body says which ticket, the number and how it was chosen, and links the Readiness review section. End with the attribution line. Link the PR in T3 Code if that tool is available.
 8. **Take it through review** like any PR (see `next-ticket`, step 4). The user merges it. Never merge it yourself. Once it's merged, `scripts/ticket.sh list` shows the ticket as `ready`.
 

@@ -1,6 +1,6 @@
 # Project status
 
-Last updated 2026-11-17. This is a handoff note between working sessions. The system spec is in `docs/`; this file tracks where the work stands. Keep one fact or next step per line, so updates change a line rather than rewrite a paragraph.
+Last updated 2026-11-18. This is a handoff note between working sessions. The system spec is in `docs/`; this file tracks where the work stands. Keep one fact or next step per line, so updates change a line rather than rewrite a paragraph.
 
 ## Where things are
 
@@ -18,9 +18,11 @@ Last updated 2026-11-17. This is a handoff note between working sessions. The sy
 - **Day 3** (connect the backlog to the agent, and work tickets one per branch and PR). The user chose to keep the backlog in the repo rather than an external tracker.
   - PR #7 (merged 2026-11-16): the backlog is the ticket system, with a `ready` status, a number given when a ticket is marked ready, and claims made by creating the ticket's branch. Adds `scripts/ticket.sh` (`list`, `claim next`, `claim NNN-slug`, `verify`) and the `next-ticket` skill (in `.agents/skills/`, with `.claude/skills` a symlink to it, so Claude Code, Codex, and opencode all find it).
   - PR #8 (merged 2026-11-17): a designed backlog item for a `refine-ticket` skill (Definition of Ready, interview with `grilling`, vertical slices, adversarial review with evidence from two reviewers in round 1 and then the more useful one, then the user's approval before `ready`), compared against Matt Pocock's skills and pstack. Also adds the `grilling` skill, copied from Matt Pocock's skills (MIT, pinned to upstream commit 7739eae).
-  - PR #9 (open, branch `ready-003`): marks `refine-ticket` ready as ticket 003, at the user's request (2026-11-17).
+  - PR #9 (merged 2026-11-17): marks `refine-ticket` ready as ticket 003, at the user's request. `scripts/ticket.sh list` shows `003-refine-ticket-skill  ready`.
   - Designed, not ready: delete expired sessions, and the server container image. The user moved both back from `ready` before #7 merged.
-  - **Next:** after #9 merges, an agent builds 003 with the `next-ticket` skill (`scripts/ticket.sh claim next`). The user marks the other tickets `ready` when satisfied with them.
+  - Ticket 003 is being built: claimed 2026-11-17 (claim `37dc4f12`), PR #10 (https://github.com/JD-cookie/Test01/pull/10), branch `003-refine-ticket-skill`. Acceptance checks 1, 5–9, and 11 pass. Checks 2 and 3 need the user: a real refinement of "Delete expired session rows", with Codex and opencode as reviewers.
+  - 2026-11-18: the user chose the row recheck for "A merged ticket gets a second ready PR" (step 9.6), and asked to run checks 2 and 3 on "Delete expired session rows" (refined on a local `refine-` branch).
+  - **Next:** run check 2 with the user, record it in the doc's "Delivery and review", take #10 through review. The user marks the other tickets `ready` when satisfied with them.
 
 - **Purpose:** a learning project, for exploring technology the user hasn't worked with before: phone apps, GitOps, OpenTelemetry, and more. Build things the real way, and explain new technology as it's introduced.
 
@@ -60,8 +62,8 @@ Last updated 2026-11-17. This is a handoff note between working sessions. The sy
 - **Merged PRs** (all squash-merged with the PR title):
   - 2026-11-13: #2 (husky), #3 (CI, Conventional Commits, release-please), #1 (rate limiting), #4 (release-please's release PR), #5 (AGENTS.md), #6 (the PR title check uses the base branch's commitlint rules, which covers the Qodo finding on #3 that was left open).
   - 2026-11-16: #7 (the backlog as the ticket system, `scripts/ticket.sh`, the `next-ticket` skill), after Qodo reviewed every push and each finding was fixed.
-  - 2026-11-17: #8 (the `grilling` skill and the `refine-ticket` design), with both Qodo findings fixed.
-- **Open PRs:** #9, ticket 003 marked `ready`.
+  - 2026-11-17: #8 (the `grilling` skill and the `refine-ticket` design), with both Qodo findings fixed. #9 (ticket 003 marked `ready`, and this file restructured to one fact per line).
+- **Open PRs:** #10, ticket 003 (the `refine-ticket` skill).
 - **Release process:** works end to end.
   - Merging #1 made the App open #4, which bumped the server to 0.2.0 (`package.json`, the lockfile, the manifest, and `server/CHANGELOG.md`) and left the app at 0.1.0. CI ran on it.
   - Merging #4 created the tag `server-v0.2.0` and the GitHub Release "server: v0.2.0".
