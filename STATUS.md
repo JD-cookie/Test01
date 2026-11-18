@@ -22,6 +22,8 @@ Last updated 2026-11-18. This is a handoff note between working sessions. The sy
   - Designed, not ready: delete expired sessions, and the server container image. The user moved both back from `ready` before #7 merged.
   - Ticket 003 is being built: claimed 2026-11-17 (claim `37dc4f12`), PR #10 (https://github.com/JD-cookie/Test01/pull/10), branch `003-refine-ticket-skill`. Acceptance checks 1, 5–9, and 11 pass. Checks 2 and 3 need the user: a real refinement of "Delete expired session rows", with Codex and opencode as reviewers.
   - 2026-11-18: the user chose the row recheck for "A merged ticket gets a second ready PR" (step 9.6), and asked to run checks 2 and 3 on "Delete expired session rows" (refined on a local `refine-` branch).
+  - The refinement is paused on local branch `refine-delete-expired-sessions` (facts and checks written, one local commit). Waiting on the user's answers to the round-1 questions and the opencode model rotation. The user wants #10 merged first, because the review copy needs the Definition of Ready on `main`.
+  - Found during that run, fixed in #10: Claude Code replaced `$2` in the skill's awk commands with an argument word.
   - **Next:** run check 2 with the user, record it in the doc's "Delivery and review", take #10 through review. The user marks the other tickets `ready` when satisfied with them.
 
 - **Purpose:** a learning project, for exploring technology the user hasn't worked with before: phone apps, GitOps, OpenTelemetry, and more. Build things the real way, and explain new technology as it's introduced.

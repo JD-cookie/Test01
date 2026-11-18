@@ -130,13 +130,15 @@ Until `scripts/ticket.sh ready` exists (see the backlog), follow these steps by 
 
 In the commands below, `$title` is the item's title exactly as it is in its row on `main` (for a linked title, the text inside `[…]`), and `$slug` is the doc's name without `.md`. If any command fails, stop and tell the user: a check that couldn't run hasn't passed.
 
+The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`), never a dollar sign and the column number. When Claude Code loads a skill with arguments, it replaces each `$` followed by a digit with a word of the arguments, even inside code.
+
 1. **Check the item and find the next free number.** On a fresh `origin/main`, the item's row must still have no number and not be `ready`. If it has one, someone else marked it ready: stop and tell the user. If its Notes start with "Blocked by: …", each item named there must be built: its row is gone from the backlog, and it's in the Features table of `docs/README.md`. If one isn't, stop and tell the user: a blocked item isn't marked ready until what blocks it is built. The number must be unused on `main` and in every ticket and reservation branch on `origin`:
 
    ```sh
    git fetch -q origin &&
    heads=$(git ls-remote --heads origin) &&
    max=$({
-     git show origin/main:docs/backlog/README.md | awk -F'|' '$2 ~ /^ *[0-9][0-9][0-9] *$/ { print $2 }'
+     git show origin/main:docs/backlog/README.md | awk -F'|' -v c=2 '$c ~ /^ *[0-9][0-9][0-9] *$/ { print $c }'
      git ls-tree -r --name-only origin/main docs/features/ | sed -nE 's#.*/([0-9]{3})-.*#\1#p'
      printf '%s\n' "$heads" | sed -nE 's#.*refs/heads/(ready-)?([0-9]{3})(-.*)?$#\2#p'
    } | tr -d ' ' | sort -n | tail -1) &&
@@ -161,7 +163,7 @@ In the commands below, `$title` is the item's title exactly as it is in its row 
 
    ```sh
    git fetch -q origin &&
-   { git show origin/main:docs/backlog/README.md | awk -F'|' '{ gsub(/ /, "", $2) } $2 == n' n="$n"
+   { git show origin/main:docs/backlog/README.md | awk -F'|' -v c=2 -v n="$n" '{ gsub(/ /, "", $c) } $c == n'
      git ls-tree -r --name-only origin/main docs/features/ | grep "/$n-"; } | grep -q . && echo "taken on main"
    ```
 
@@ -179,7 +181,7 @@ In the commands below, `$title` is the item's title exactly as it is in its row 
    done
    row=$(git show origin/main:docs/backlog/README.md | grep -F -e "[$title](" -e "| $title |") ||
      echo "error: no row on main"
-   printf '%s\n' "$row" | awk -F'|' '{ gsub(/ /, "", $2) } $2 != ""' | grep -q . && echo "same item: on main"
+   printf '%s\n' "$row" | awk -F'|' -v c=2 '{ gsub(/ /, "", $c) } $c != ""' | grep -q . && echo "same item: on main"
    ```
 
    The row is the item's one stable mark: a refinement may create the doc or rename it, but every ready PR changes the row's number and status. The last three lines repeat step 1's check of the row on `main`: another ready PR for this item may have merged since then, and its branch is gone, so the loop can't see it. If it prints `same item` or `error`, don't open the PR. Tell the user, and let them choose which branch to keep. Never delete another agent's branch. Each agent checks after its own push, so two racing on one item can't both miss each other: at worst, both stop and ask.

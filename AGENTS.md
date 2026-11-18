@@ -117,7 +117,7 @@ A skill is a folder with a `SKILL.md`: a name, a description that tells the agen
 - **`.agents/skills/<name>/SKILL.md`** is where skills live. Codex and opencode read this folder.
 - **`.claude/skills`** is a symlink to `.agents/skills`, because Claude Code reads only `.claude/skills`. opencode reads both and finds the same skill once.
 
-Add new skills under `.agents/skills/`, never as a real folder in `.claude/skills/`. An agent that reads neither folder can still follow a skill: it's plain Markdown.
+Add new skills under `.agents/skills/`, never as a real folder in `.claude/skills/`. Don't write `$` followed by a digit in a skill (`$1`, `$2`, …), not even in code: Claude Code replaces each one with a word of the skill's arguments. In `awk`, name the column with a variable instead (`awk -v c=2 '{ print $c }'`). An agent that reads neither folder can still follow a skill: it's plain Markdown.
 
 A skill copied from elsewhere, like `grilling` from [Matt Pocock's skills](https://github.com/mattpocock/skills), keeps its license file in its folder and a note at the top that links the exact upstream commit. Change it only by copying a newer upstream version, so it stays comparable with the original.
 
