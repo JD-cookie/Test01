@@ -11,7 +11,7 @@ The design behind this skill, and the reasons for each step, are in `docs/featur
 
 Two rules hold throughout:
 - **Facts are yours, decisions are the user's.** Anything you can find by reading the repo, the docs, the code, or git history, or by running something, you find yourself. Never ask the user for a fact. Ask only about product and preference choices, and never guess at one that changes the scope or the behavior.
-- **You only edit docs:** the item's design doc, `docs/backlog/README.md`, and `docs/README.md`. Probes follow "Probes" below.
+- **You only edit docs:** the item's design doc, `docs/backlog/README.md`, `docs/README.md`, and the results table in this skill's [`reviewers.md`](reviewers.md). Probes follow "Probes" below.
 
 The user can stop at any step. The doc keeps whatever was settled, and the status stays as it was.
 
@@ -90,10 +90,10 @@ A clone has only committed files: none of the ignored ones, such as `server/.env
 | Agent | Command | What keeps it read-only |
 |---|---|---|
 | Codex | `codex exec -s read-only -c approval_policy='"never"' --ephemeral -C "$rc" -o "$out" - < "$prompt"` | The read-only sandbox, which the OS enforces. `approval_policy="never"` is required: with a user config of `on-request` and an automatic approver, Codex asks to leave the sandbox and gets a yes. |
-| opencode | `cd "$rc" && opencode run --standalone --agent plan "$(cat "$prompt")" > "$out"` | The `opencode.json` copied into the clone, which overrides user settings for the `plan` agent: everything denied except the `read`, `grep`, `glob`, and `list` tools. No shell, edits, subagents, or web. Check it from `$rc` with `opencode debug agents --standalone`: the plan agent's rules must start `* * deny` and allow only those four. `--standalone` makes opencode read the config fresh: its background service caches each directory's config the first time it sees it. |
+| opencode | `cd "$rc" && opencode run --standalone --agent plan -m "$model" "$(cat "$prompt")" > "$out"`, with `$model` chosen from [`reviewers.md`](reviewers.md) (below) | The `opencode.json` copied into the clone, which overrides user settings for the `plan` agent: everything denied except the `read`, `grep`, `glob`, and `list` tools. No shell, edits, subagents, or web. Check it from `$rc` with `opencode debug agents --standalone`: the plan agent's rules must start `* * deny` and allow only those four. `--standalone` makes opencode read the config fresh: its background service caches each directory's config the first time it sees it. |
 | Claude Code | `cd "$rc" && claude -p --permission-mode plan --tools Read,Grep,Glob --strict-mcp-config < "$prompt" > "$out"` | Only the `Read`, `Grep`, and `Glob` tools exist in the session, with no MCP servers, in plan mode. |
 
-Run the round-1 reviewers in parallel if you can (for example, two background commands), or one after the other. A review can take several minutes: allow up to 15 before treating it as stuck. Note the model each one used: `codex` prints it in its header, and opencode prints it on each step (`> plan · <model>`). opencode and Claude use their configured default unless `-m` or `--model` is given. If the default is a small model, ask the user which model to use.
+Run the round-1 reviewers in parallel if you can (for example, two background commands), or one after the other. A review can take several minutes: allow up to 15 before treating it as stuck. Note the model each one used: `codex` prints it in its header, and opencode prints it on each step (`> plan · <model>`). **opencode's model** is the one of the candidates in [`reviewers.md`](reviewers.md) with the fewest rows in its results table, and the one higher in the list on a tie. So each model gets tried in turn, and a model added to the list later is tried next. Codex and Claude use their configured default. If one of those is a small model, ask the user which model to use.
 
 Only Codex has a shell, and its sandbox is enforced by the OS. The other two can only read files. Allowing some shell commands isn't read-only: `git diff --output=<file>`, for one, writes a file. So reviewers don't run tests or probes. A claim that only running something can check comes back as a "needs a run" finding, and you run it, as a probe.
 
@@ -108,6 +108,8 @@ If anything changed, stop, and tell the user what changed and which reviewer ran
 1. **Check its evidence.** Open the file and line it cites, or rerun its command in a scratch place. A finding with no evidence, or with evidence that doesn't show what it claims, is **dropped**. Count the drops, with the reason for each. For a **"needs a run"** finding, run what it names as a probe (see "Probes"). It's kept if the output shows the problem, with that output as its evidence, and dropped if not.
 2. **Compare the reviewer's restatement** with yours from step 2. A real difference is a finding: the doc can be read two ways.
 3. **Fix it in the doc, or answer it** with the reason it stays, as for a PR finding. A fix that needs a decision goes to the user through step 6.
+
+**Record the round** in the results table of [`reviewers.md`](reviewers.md): one row per reviewer, with the date, the item's title, the round, the agent, the model, and its kept, answered, and dropped counts. It goes in the refinement's commit, with the doc.
 
 After the fixes, run the next round. Stop when a round has no kept findings. After three rounds with kept findings still coming, stop and ask the user how to go on.
 
