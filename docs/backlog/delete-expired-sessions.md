@@ -50,13 +50,15 @@ CREATE INDEX sessions_expires_at ON sessions(expires_at);
 Append it as a new entry in `MIGRATIONS`, and never edit migration 1. The schema stays portable: a plain index on a text column.
 
 This is the first migration added to a database that already exists, so make the runner in `openDb` safe for two processes starting at once on the same file, for example a dev server restarting while another is still up. Today each process reads `user_version` before its transaction, so both can try to create the index, and the second fails. Instead, for each migration:
-1. Start the transaction with `BEGIN IMMEDIATE`, which takes SQLite's write lock at the start, so a second process waits instead of failing. Also set `PRAGMA busy_timeout` (5 seconds) when the database opens, so the wait doesn't fail at once.
+1. Start the transaction with `BEGIN IMMEDIATE`, which takes SQLite's write lock at the start, so a second process waits instead of failing. Set `PRAGMA busy_timeout = 5000` (5 seconds) when the database opens, before the other pragmas, so the wait doesn't fail at once. Set it back to `0` after the last migration: `node:sqlite` is synchronous, so a busy wait during a request would block the whole server for up to 5 seconds. Requests then fail at once under contention, as they do today, and a sweep that finds the database busy fails, is logged, and runs again an hour later.
 2. Read `user_version` again inside the transaction, and skip the migration if another process already applied it.
 
 Probed on 2026-11-18 (Node 24.22, a scratch file database at version 1, two child processes migrating it while the parent held the write lock, three runs each):
 - today's runner: both processes failed with `database is locked`
 - `busy_timeout` alone, without the recheck: one failed with `index sessions_expires_at already exists`
 - `BEGIN IMMEDIATE`, the recheck, and `busy_timeout`: both succeeded, at version 2
+
+A database created without WAL mode can't be used for this: a child's `PRAGMA journal_mode = WAL` then fails at once with `database is locked` while the lock is held, busy timeout or not (probed). Every database `openDb` has opened is already in WAL mode, so only a brand-new file has this problem, and two processes creating the same new file at once stays a known gap.
 
 Without the parent holding the lock, today's runner still failed 3 times out of 3, but which way depends on timing. So acceptance check 9 holds the lock until both children have started: each one writes `start` synchronously just before `openDb`, and then blocks on the lock (probed: the child wrote `start` at 23 ms, the parent committed at 224 ms, the child finished at 252 ms).
 
@@ -67,7 +69,7 @@ This only covers SQLite. The server still supports one instance per database ([d
 - Nobody can trigger a sweep: there's no endpoint, and it runs only on the server's own timer.
 - If the database is busy or fails, the sweep logs `error` and the server keeps serving. Expired rows wait for the next sweep, and expired tokens are still rejected meanwhile.
 - No new settings. The interval (1 hour) is a constant. Tests call the sweep function directly instead of waiting for the timer.
-- Known gaps: none new. The sweep can't delete a row whose session is still valid: it only deletes rows with `expires_at <= now`, the opposite of the test `requireUser` in `server/src/app.ts` uses to accept one (`expires_at > now`), which `GET /api/v1/me` runs.
+- Known gaps: two processes creating a brand-new database file at the same moment can still fail, at the WAL pragma (see "Data model"); only one server runs per database for now. The sweep can't delete a row whose session is still valid: it only deletes rows with `expires_at <= now`, the opposite of the test `requireUser` in `server/src/app.ts` uses to accept one (`expires_at > now`), which `GET /api/v1/me` runs.
 - In 001's Security section, delete the "Deleting expired session rows" line from the known gaps.
 
 ## Tasks for the user
@@ -92,10 +94,10 @@ Checks 1 to 8 are `node:test` tests in `server/test/sessions.test.ts`, through `
 5. **The sweep doesn't change the API:** on a file database, sign up through the API to get a token, then set its session's `expires_at` to a past time through a second connection (no endpoint makes an expired session). The token gets `401 UNAUTHENTICATED` from `GET /api/v1/me` before the sweep, and again after `runSweep` deletes its row.
 6. **Hourly sweep, at the time of each sweep, stopped by close:** with `mock.timers` (node:test) enabled before `buildApp`, mocking only `setInterval` and `Date` (so `setTimeout` stays real for Fastify), starting at a fixed time, and a file database. Probed 2026-11-18: the mocked `setInterval` returns a handle with `unref`, and `clearInterval` clears it.
    - a session written before startup that expires 30 minutes after it survives the startup sweep; a `mock.timers.tick` of one hour deletes it, so each sweep uses the current time, not the startup time
-   - after `app.close()`, an expired row is added through a second connection; a tick of one hour leaves it in place
-7. **A failed sweep doesn't stop the server:** `runSweep(db, log)`, the function the startup sweep and the timer both call, is given a database whose `prepare` throws. It logs one `error` with the message `sessions: sweep failed`, and returns without throwing. An uncaught error in a `setInterval` callback would end the process, so the catch is what keeps the server up. With the real database again, the next call deletes the expired rows. A unit test with a stub `db` and a stub `log` that records its calls.
+   - `app.close()` stops the timer: with `clearInterval` wrapped by `mock.method` before the close, the close calls it once. (Checking that a row stays after the next tick can't fail: the closed database makes that sweep fail, and `runSweep` catches the error.)
+7. **A failed sweep doesn't stop the server:** `runSweep(db, log)`, the function the startup sweep and the timer both call, is given a database whose `prepare` throws. It logs one `error` with the message `sessions: sweep failed`, and returns without throwing. With a database that has one expired row, it logs one `info`, `sessions: deleted 1 expired`; with nothing expired, it makes no log call at all. An uncaught error in a `setInterval` callback would end the process, so the catch is what keeps the server up. With the real database again, the next call deletes the expired rows. A unit test with a stub `db` and a stub `log` that records its calls.
 8. **Upgrade:** opening a file database at version 1 (made by applying only `MIGRATIONS[0]` and setting `PRAGMA user_version = 1`) applies migration 2: `PRAGMA user_version` becomes 2, and `sqlite_master` lists the index `sessions_expires_at`.
-9. **Two processes migrating at once:** on a file database at version 1, the test takes the write lock with `BEGIN IMMEDIATE` on its own connection, and starts two child processes. Each child writes `start` to stdout with `fs.writeSync`, a synchronous write, right before it calls `openDb` on the file. The test commits 200 ms after it has read `start` from both, and fails if they haven't both written it within 10 seconds. Both children exit with code 0, and the database is at version 2 with the index. Run against today's runner, both children fail with `database is locked` (see the probe under "Data model"), so this check can fail. It's in `server/test/sessions.test.ts` too, and passes the same way.
+9. **Two processes migrating at once:** on a file database at version 1, created in WAL mode as every database `openDb` makes is, the test takes the write lock with `BEGIN IMMEDIATE` on its own connection, and starts two child processes. Each child writes `start` to stdout with `fs.writeSync`, a synchronous write, right before it calls `openDb` on the file. The test commits 200 ms after it has read `start` from both, and fails if they haven't both written it within 10 seconds. Both children exit with code 0, and the database is at version 2 with the index. Run against today's runner, both children fail with `database is locked` (see the probe under "Data model"), so this check can fail. It's in `server/test/sessions.test.ts` too, and passes the same way.
 10. `npm run check` passes locally and in CI. The 001 doc no longer lists this as a gap, and `docs/devops.md`'s migrations section describes the lock, the recheck, and the busy timeout.
 
 ## Readiness review
@@ -128,6 +130,12 @@ Refined 2026-11-18 by Claude Code (claude-opus-5-5).
   - opencode 6: a version-1 database needs migration 1's SQL, and `MIGRATIONS` isn't exported. Evidence: `server/src/db.ts`. Fixed: export it.
   - Dropped: 1. opencode 3 (needs a run): would the mocked `setInterval` handle lack `unref`? The probe printed `handle: object | unref: function` and `cleared: ok`.
   - Kept for later rounds: opencode, with 5 kept findings to Codex's 3.
+- **Review round 2:** opencode (ollama-cloud/glm-5.3). Its restatement matches. It checked each round-1 fix against the code, and they hold.
+  - Finding 1: check 6's "row stays after close" can't fail, because a sweep on the closed database fails and is caught. Evidence: the `onClose` hook in `server/src/app.ts` closes the database. Fixed: the check requires `clearInterval` to be called by the close.
+  - Finding 2: the `info` log, and logging nothing for an empty sweep, had no check. Evidence: the "Logging" line. Fixed: check 7 covers both.
+  - Finding 3 (needs a run): a version-1 file made without WAL makes check 9 fail even with the fix. Probe: on a non-WAL file, the child's WAL pragma failed at once with `database is locked` while the lock was held; on a WAL file it passed. Fixed: check 9's file is made in WAL mode, and a brand-new file is a known gap.
+  - Finding 4: the busy timeout lasts for the connection, so a request could wait up to 5 seconds, which contradicts "every response stays the same". Evidence: the route handlers write on the same connection. Fixed: the timeout goes back to 0 after the migrations, because `node:sqlite` is synchronous and a wait would block the whole server.
+  - Dropped: 0.
 
 ## Decisions made for this ticket
 
