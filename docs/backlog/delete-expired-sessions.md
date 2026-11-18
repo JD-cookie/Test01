@@ -150,6 +150,7 @@ Refined 2026-11-18 by Claude Code (claude-opus-5-5).
   - opencode 1: "after the last migration" can be read as inside the loop, so on an already-current database, which is every restart after the upgrade, the timeout would stay 5000. Evidence: "Data model" step 1; check 8 reads the timeout only after a migration ran. Fixed: the reset is after the loop, whether or not a migration ran, and check 8 reopens the file at version 2 and reads it again.
   - opencode 3: the `unref` mock, read in order, is set after `buildApp` has already called `unref`, so it can never count a call. Evidence: check 6's first bullet, and the implementation map's "`setInterval`, then `unref`". Fixed: the wrapper replaces `unref` before returning the handle.
   - Dropped: 0.
+- **Approved by the user:** 2026-11-18, after round 4. Rounds 3 and 4 found only acceptance checks that couldn't fail and wording a builder could misread, so the user chose to stop the review there.
 
 ## Decisions made for this ticket
 
