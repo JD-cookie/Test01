@@ -174,19 +174,20 @@ The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`)
 
    ```sh
    git fetch -q origin &&
+   item='{ x = $c; gsub(/^ +| +$/, "", x) } x == t || index(x, "[" t "](") == 1' &&
    heads=$(git ls-remote --heads origin 'ready-*') &&
    for b in $(printf '%s\n' "$heads" | sed -n 's#.*refs/heads/##p'); do
      [ "$b" = "ready-$n" ] && continue
      git fetch -q origin "$b" && base=$(git merge-base origin/main FETCH_HEAD) || { echo "error: $b"; break; }
      git diff "$base" FETCH_HEAD -- docs/backlog/README.md | grep '^-|' |
-       grep -qF -e "[$title](" -e "| $title |" && echo "same item: $b"
+       awk -F'|' -v c=3 -v t="$title" "$item" | grep -q . && echo "same item: $b"
    done
-   row=$(git show origin/main:docs/backlog/README.md | grep -F -e "[$title](" -e "| $title |") ||
-     echo "error: no row on main"
+   row=$(git show origin/main:docs/backlog/README.md | awk -F'|' -v c=3 -v t="$title" "$item")
+   [ -n "$row" ] || echo "error: no row on main"
    printf '%s\n' "$row" | awk -F'|' -v c=2 '{ gsub(/ /, "", $c) } $c != ""' | grep -q . && echo "same item: on main"
    ```
 
-   The row is the item's one stable mark: a refinement may create the doc or rename it, but every ready PR changes the row's number and status. The last three lines repeat step 1's check of the row on `main`: another ready PR for this item may have merged since then, and its branch is gone, so the loop can't see it. If it prints `same item` or `error`, don't open the PR. Tell the user, and let them choose which branch to keep. Never delete another agent's branch. Each agent checks after its own push, so two racing on one item can't both miss each other: at worst, both stop and ask.
+   The row is the item's one stable mark: a refinement may create the doc or rename it, but every ready PR changes the row's number and status. `$item` matches a row by its Item column only (`awk` field 3: field 1 is the empty text before the first `|`, and field 2 is `#`), as the plain title or as a link's text: another row's Notes can link to this item, and must not count as its row. The last three lines repeat step 1's check of the row on `main`: another ready PR for this item may have merged since then, and its branch is gone, so the loop can't see it. If it prints `same item` or `error`, don't open the PR. Tell the user, and let them choose which branch to keep. Never delete another agent's branch. Each agent checks after its own push, so two racing on one item can't both miss each other: at worst, both stop and ask.
 7. **Open the PR** from `ready-$n` to `main`, with a Conventional Commits title like the commit's. The body says which ticket, the number and how it was chosen, and links the Readiness review section. End with the attribution line. Link the PR in T3 Code if that tool is available.
 8. **Take it through review** like any PR (see `next-ticket`, step 4). The user merges it. Never merge it yourself. Once it's merged, `scripts/ticket.sh list` shows the ticket as `ready`.
 
