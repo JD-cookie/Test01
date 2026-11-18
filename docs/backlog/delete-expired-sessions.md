@@ -6,7 +6,7 @@ Status: **designed**. When the user marks it `ready`, it gets a number and this 
 
 Sessions expire 30 days after login (see [001](../features/001-accounts.md#data-model)), and an expired token is already rejected with `401`. But its row stays in `sessions` forever. This feature deletes expired rows on a schedule, so the table only holds sessions that can still be used. It's housekeeping: nothing changes for users or for the API.
 
-It's for whoever runs the server: today the table only grows, by one row per login, and a lookup by token never needs the old rows. What doesn't change: how long a session lasts, how tokens are checked, logout, and every response the API gives.
+It's for whoever runs the server: today every login adds a row, and only a logout deletes one, so expired rows are never removed. A lookup by token never needs them. What doesn't change: how long a session lasts, how tokens are checked, logout, and every response the API gives.
 
 ### Out of scope
 
@@ -36,7 +36,7 @@ No changes. Rejecting an expired token doesn't depend on the sweep: a session wi
   ```
   `:now` is the current time as an ISO 8601 UTC string, in the same format as `expires_at` (`Date.prototype.toISOString()`), so comparing the strings compares the times.
 - **More than one instance:** every instance runs its own sweep, with no coordination. A sweep is idempotent, so overlapping sweeps are harmless: each deletes whatever is expired at that moment. Nothing is kept in process memory (`AGENTS.md` rule 2).
-- **Logging:** a sweep that deletes rows logs `info` with the count (`sessions: deleted N expired`). A sweep that deletes nothing logs nothing. A failed sweep logs `error` and changes nothing else: the server keeps serving, and the next sweep tries again.
+- **Logging:** a sweep that deletes rows logs `info` with the count (`sessions: deleted N expired`). A sweep that deletes nothing logs nothing. A failed sweep logs `error` with the error and the message `sessions: sweep failed`, and changes nothing else: the server keeps serving, and the next sweep tries again.
 - **Shutdown:** the hourly timer stops when the server closes. It doesn't keep the process alive (`unref`).
 
 ## Data model
@@ -58,7 +58,7 @@ Probed on 2026-11-18 (Node 24.22, a scratch file database at version 1, two chil
 - `busy_timeout` alone, without the recheck: one failed with `index sessions_expires_at already exists`
 - `BEGIN IMMEDIATE`, the recheck, and `busy_timeout`: both succeeded, at version 2
 
-Without the parent holding the lock, today's runner still failed 3 times out of 3, but which way depends on timing. So acceptance check 8 holds the lock, which makes the overlap certain.
+Without the parent holding the lock, today's runner still failed 3 times out of 3, but which way depends on timing. So acceptance check 9 holds the lock until both children have started: each one writes `start` synchronously just before `openDb`, and then blocks on the lock (probed: the child wrote `start` at 23 ms, the parent committed at 224 ms, the child finished at 252 ms).
 
 This only covers SQLite. The server still supports one instance per database ([devops.md](../devops.md#environments)). Running migrations once per deploy, instead of at each instance's startup, belongs to the staging and production database item in the backlog.
 
@@ -67,7 +67,7 @@ This only covers SQLite. The server still supports one instance per database ([d
 - Nobody can trigger a sweep: there's no endpoint, and it runs only on the server's own timer.
 - If the database is busy or fails, the sweep logs `error` and the server keeps serving. Expired rows wait for the next sweep, and expired tokens are still rejected meanwhile.
 - No new settings. The interval (1 hour) is a constant. Tests call the sweep function directly instead of waiting for the timer.
-- Known gaps: none new. The sweep can't delete a row whose session is still valid: it only deletes rows with `expires_at <= now`, the same test login uses to reject a token.
+- Known gaps: none new. The sweep can't delete a row whose session is still valid: it only deletes rows with `expires_at <= now`, the opposite of the test `requireUser` in `server/src/app.ts` uses to accept one (`expires_at > now`), which `GET /api/v1/me` runs.
 - In 001's Security section, delete the "Deleting expired session rows" line from the known gaps.
 
 ## Tasks for the user
@@ -76,26 +76,58 @@ None. No settings, secrets, or accounts are needed.
 
 ## Implementation map
 
-- `server/src/db.ts`: migration 2 (the index), and the runner's `BEGIN IMMEDIATE` with the `user_version` recheck and the busy timeout.
-- `server/src/sessions.ts` (new): `deleteExpiredSessions(db, now): number`, which returns the number of rows deleted, and `SWEEP_INTERVAL_MS` (one hour).
+- `server/src/db.ts`: migration 2 (the index); export `MIGRATIONS`, so tests can make a version-1 database from migration 1's own SQL instead of a copy; and the runner's `BEGIN IMMEDIATE` with the `user_version` recheck and the busy timeout.
+- `server/src/sessions.ts` (new): `deleteExpiredSessions(db, now): number`, which returns the number of rows deleted; `runSweep(db, log)`, which calls it with the current time, logs the result, and catches and logs any error; and `SWEEP_INTERVAL_MS` (one hour).
 - `server/src/app.ts`: in `buildApp`, the startup sweep, the hourly timer (`setInterval`, then `unref`), and clearing the timer in the existing `onClose` hook, before `db.close()`.
 - `server/test/`: tests for the acceptance checks below.
 
 ## Acceptance checks
 
-Checks 1 to 7 are `node:test` tests in `server/test/sessions.test.ts`, through `buildApp` and Fastify's `inject` where there's an API to call. Each passes when `npm --prefix server test` reports it passing, in CI too.
+Checks 1 to 8 are `node:test` tests in `server/test/sessions.test.ts`, through `buildApp` and Fastify's `inject` where there's an API to call. Each passes when `npm --prefix server test` reports it passing, in CI too.
 
 1. With one expired and one valid session in the database, `deleteExpiredSessions(db, now)` deletes the expired row, keeps the valid one, and returns 1.
-2. A session whose `expires_at` equals `now` is deleted. Its token is already rejected at that moment, because a session is valid only while `expires_at > now`.
+2. A session whose `expires_at` equals `now` is deleted. (That's safe: its token is already rejected at that moment, because a session is valid only while `expires_at > now`. This part is the reason, not something the test checks.)
 3. A sweep with nothing expired deletes nothing and returns 0.
 4. **Startup sweep:** an expired row written to a file database before `buildApp` is gone once `await app.ready()` returns.
-5. **The sweep doesn't change the API:** a token whose session expired gets `401 UNAUTHENTICATED` from `GET /api/v1/me`, both before and after the sweep deletes its row.
-6. **Hourly sweep, stopped by close:** with `mock.timers` (node:test) mocking `setInterval`, and a file database:
-   - after startup, an expired row is added through a second connection; `mock.timers.tick` of one hour deletes it
-   - after `app.close()`, another expired row is added through the second connection; a tick of one hour leaves it in place
-7. **Upgrade:** opening a file database at version 1 (made with migration 1 only) applies migration 2: `PRAGMA user_version` becomes 2, and `sqlite_master` lists the index `sessions_expires_at`.
-8. **Two processes migrating at once:** on a file database at version 1, the test takes the write lock with `BEGIN IMMEDIATE` on its own connection, starts two child processes that each call `openDb` on the file, and commits after 500 ms. Both children exit with code 0, and the database is at version 2 with the index. Run against today's runner, both children fail with `database is locked` (see the probe under "Data model"), so this check can fail. It's in `server/test/sessions.test.ts` too, and passes the same way.
-9. `npm run check` passes locally and in CI. The 001 doc no longer lists this as a gap, and `docs/devops.md`'s migrations section describes the lock, the recheck, and the busy timeout.
+5. **The sweep doesn't change the API:** on a file database, sign up through the API to get a token, then set its session's `expires_at` to a past time through a second connection (no endpoint makes an expired session). The token gets `401 UNAUTHENTICATED` from `GET /api/v1/me` before the sweep, and again after `runSweep` deletes its row.
+6. **Hourly sweep, at the time of each sweep, stopped by close:** with `mock.timers` (node:test) enabled before `buildApp`, mocking only `setInterval` and `Date` (so `setTimeout` stays real for Fastify), starting at a fixed time, and a file database. Probed 2026-11-18: the mocked `setInterval` returns a handle with `unref`, and `clearInterval` clears it.
+   - a session written before startup that expires 30 minutes after it survives the startup sweep; a `mock.timers.tick` of one hour deletes it, so each sweep uses the current time, not the startup time
+   - after `app.close()`, an expired row is added through a second connection; a tick of one hour leaves it in place
+7. **A failed sweep doesn't stop the server:** `runSweep(db, log)`, the function the startup sweep and the timer both call, is given a database whose `prepare` throws. It logs one `error` with the message `sessions: sweep failed`, and returns without throwing. An uncaught error in a `setInterval` callback would end the process, so the catch is what keeps the server up. With the real database again, the next call deletes the expired rows. A unit test with a stub `db` and a stub `log` that records its calls.
+8. **Upgrade:** opening a file database at version 1 (made by applying only `MIGRATIONS[0]` and setting `PRAGMA user_version = 1`) applies migration 2: `PRAGMA user_version` becomes 2, and `sqlite_master` lists the index `sessions_expires_at`.
+9. **Two processes migrating at once:** on a file database at version 1, the test takes the write lock with `BEGIN IMMEDIATE` on its own connection, and starts two child processes. Each child writes `start` to stdout with `fs.writeSync`, a synchronous write, right before it calls `openDb` on the file. The test commits 200 ms after it has read `start` from both, and fails if they haven't both written it within 10 seconds. Both children exit with code 0, and the database is at version 2 with the index. Run against today's runner, both children fail with `database is locked` (see the probe under "Data model"), so this check can fail. It's in `server/test/sessions.test.ts` too, and passes the same way.
+10. `npm run check` passes locally and in CI. The 001 doc no longer lists this as a gap, and `docs/devops.md`'s migrations section describes the lock, the recheck, and the busy timeout.
+
+## Readiness review
+
+Refined 2026-11-18 by Claude Code (claude-opus-5-5).
+
+- **Goal, restated:** housekeeping for whoever runs the server. Expired sessions are already rejected, but their rows are never deleted. The smallest fix is a sweep at startup and hourly, an index for it in migration 2, and a fix to the migration runner so two processes can apply that first upgrade at once.
+- **Is it needed:** not built: only logout deletes a session (`server/src/app.ts`), and no sweep or timer exists (searched `server/src` for `expires_at`, `sweep`, `setInterval`). No open PR overlaps it. Never dropped: the backlog history shows it as `idea`, then `designed`.
+- **Definition of Ready:**
+  1. pass: who it's for, what changes, and what doesn't are in the Summary
+  2. pass: see "Is it needed"
+  3. pass: an out-of-scope list
+  4. pass: the server and its docs only, one behavior
+  5. pass: the SQL, the log messages, the files, and the docs it changes
+  6. pass: "Tasks for the user: none"
+  7. pass: each check says where it's tested and what shows it passed; checks 6 and 9 were rewritten so they can fail
+  8. pass: rule 2 (each instance sweeps, idempotently; the migration lock) and rule 3 (001 and devops.md); rules 1, 4, and 5 don't apply
+  9. pass: no trigger but the timer, a failed sweep is logged and retried, no new gaps
+  10. pass: no open questions; the decisions are below
+- **Questions and answers:** Q1 keep the migration runner's fix in this ticket → yes. Q2 sweep at startup and hourly, with a fixed interval → yes. Q3 no grace period → yes. Q4 the sweep in a new `server/src/sessions.ts` → yes.
+- **Probes:** the migration race (today's runner fails, the fix passes, holding the lock makes it certain); `node:test` mock timers with an unref'd interval, a mocked `Date`, and a child's synchronous `start` signal.
+- **Review round 1:** Codex (gpt-6.1-sol) and opencode (ollama-cloud/glm-5.3).
+  - Both restatements match the goal above.
+  - Codex 1 and opencode 1, the same finding: no check makes a sweep fail. Evidence: the doc's "Logging" line promises it; no check tests it. Fixed: check 7, `runSweep`, and the exact error message.
+  - Codex 2: check 9 waited a fixed 500 ms, so a slow child could miss the overlap. Evidence: the check's text. Fixed: each child writes `start` synchronously before `openDb`, and the test commits 200 ms after both have (probed).
+  - Codex 3: check 6 never moved the clock, so a sweep that reused the startup time would pass. Evidence: check 6 mocked only `setInterval`. Fixed: it mocks `Date` too, with a session that expires between sweeps.
+  - opencode 2: checks 2 and 5 didn't say how an expired session is made, and no endpoint makes one. Evidence: `server/src/app.ts` sets `expires_at` to now + 30 days. Fixed: check 5's setup, and check 2's reason marked as not tested.
+  - opencode 4: the doc said login checks `expires_at`; it's `requireUser`, behind `GET /api/v1/me`. Evidence: `server/src/app.ts`. Fixed.
+  - opencode 5: "the table only grows" ignores logout. Evidence: the logout route deletes its row. Fixed.
+  - opencode 6: a version-1 database needs migration 1's SQL, and `MIGRATIONS` isn't exported. Evidence: `server/src/db.ts`. Fixed: export it.
+  - Dropped: 1. opencode 3 (needs a run): would the mocked `setInterval` handle lack `unref`? The probe printed `handle: object | unref: function` and `cleared: ok`.
+  - Kept for later rounds: opencode, with 5 kept findings to Codex's 3.
 
 ## Decisions made for this ticket
 
