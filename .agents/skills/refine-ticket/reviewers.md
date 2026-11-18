@@ -19,3 +19,4 @@ One row per reviewer per round. **Kept** findings were fixed in the doc or turne
 | 2026-11-18 | Delete expired session rows | 1 | Codex | gpt-6.1-sol | 3 | 0 | 0 |
 | 2026-11-18 | Delete expired session rows | 1 | opencode | ollama-cloud/glm-5.3 | 5 | 0 | 1 |
 | 2026-11-18 | Delete expired session rows | 2 | opencode | ollama-cloud/glm-5.3 | 4 | 0 | 0 |
+| 2026-11-18 | Delete expired session rows | 3 | opencode | ollama-cloud/glm-5.3 | 3 | 0 | 0 |
