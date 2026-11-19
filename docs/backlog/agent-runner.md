@@ -140,7 +140,7 @@ The App's permissions, on this repository only:
 ### The timer
 
 `scripts/agent-timer.sh install` writes two units to `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/`, runs `systemctl --user daemon-reload`, and `systemctl --user enable --now test01-agent.timer`:
-- `test01-agent.service`: `Type=oneshot`, `ExecStart=<repo>/scripts/agent-run.sh`, where `<repo>` is the checkout `install` runs from. It sets the `PATH` from the user's shell at install time, so `node`, `npm`, `claude`, and `gh` are found.
+- `test01-agent.service`: `Type=oneshot`, `ExecStart=<repo>/scripts/agent-run.sh`, where `<repo>` is the checkout `install` runs from. It sets the `PATH` from the user's shell at install time, so `node`, `npm`, `claude`, and `gh` are found. Probed 2026-11-19: `claude -p` under `systemd-run --user`, with only `PATH` set, answered with the user's Claude login and exited 0. The service's environment has `HOME`, `USER`, `XDG_RUNTIME_DIR`, and `PATH`, but not `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, or `XDG_STATE_HOME`, so the scripts use their defaults (`~/.config`, `~/.local/share`, `~/.local/state`).
 - `test01-agent.timer`: `OnBootSec=5min`, `OnUnitInactiveSec=15min`, so a run starts 15 minutes after the last one ended.
 
 The runner creates the labels `agent-run` and `needs-help` when it first needs them and they don't exist (`gh label create`, with the App's token). Neither exists in the repo today.
@@ -179,10 +179,10 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/test01-agent/log
 ## Tasks for the user
 
 - **Before the real run (check 11), any time before or after this PR merges:**
-  1. **Create the App** `JD-cookie-Agent` (done 2026-11-19) (GitHub → Settings → Developer settings → GitHub Apps → New GitHub App), as for release-please's App in `docs/devops.md`: no webhook, installable only on this account, with the permissions in "The App's token". Install it on Test01 only.
-  2. **Save its key and client ID:** generate a private key, save it as `~/.config/test01-agent/app.pem` with mode `600`, and write `APP_CLIENT_ID=<client id>` to `~/.config/test01-agent/app.env`.
+  1. **Create the App** `JD-cookie-Agent` (done 2026-11-19, and installed on Test01 by the user's account) (GitHub → Settings → Developer settings → GitHub Apps → New GitHub App), as for release-please's App in `docs/devops.md`: no webhook, installable only on this account, with the permissions in "The App's token". Install it on Test01 only.
+  2. **Save its key and client ID** (made 2026-11-19; to be moved from the checkout to `~/.config/test01-agent/`): generate a private key, save it as `~/.config/test01-agent/app.pem` with mode `600`, and write `APP_CLIENT_ID=<client id>` to `~/.config/test01-agent/app.env`.
   3. **Qodo:** turn on "Allow GitHub bot reviews", and add release-please's App to the logins that aren't reviewed: `test01-release-please[bot]` (its login in GitHub's API), and `app/test01-release-please` (as `gh` shows it), since it's not known which form Qodo matches.
-  4. **A ruleset for `main`** (Settings → Rules → Rulesets): require a pull request, and block force pushes and deletion, with no bypass. Then nobody, the App included, pushes to `main` except by merging a PR. *(Asked in the refinement: see "Decisions".)*
+  4. **A ruleset for `main`** (Settings → Rules → Rulesets): require a pull request, and block force pushes and deletion, with no bypass. Then nobody, the App included, pushes to `main` except by merging a PR.
 
   The builder checks 1 and 2 with `scripts/agent-timer.sh install`, which stops if a token can't be made, and 4 with `gh api repos/<owner>/<repo>/rules/branches/main`, which lists the rules. Step 3 shows on the first real PR: Qodo reviews it. The next release PR shows that Qodo still skips release-please.
 - **After this PR merges:** run `scripts/agent-timer.sh install` on the machine. The builder can't, because it starts the timer. Check: `scripts/agent-timer.sh status` shows the timer.
@@ -246,6 +246,14 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5).
   - `systemd-analyze` (probed): `--user verify` fails without a login session, and `verify` exits 0 on unknown keys. Check 10 rewritten.
   - The `gh` token expires 2027-01-11: a known gap.
 
+- **Questions and answers:**
+  - Q1: the runner's own GitHub identity, as a GitHub App → yes (2026-11-19). The user made `JD-cookie-Agent` and turns on Qodo's bot reviews, skipping release-please by login.
+  - Q2: one agent round on every commit Qodo reviews, even with no findings → yes.
+  - Q3: probe `claude -p` under `systemd-run --user` → yes: it worked (see "The timer").
+  - Q4: no Workflows permission for the App, and `needs-help` for a ticket that changes a workflow → yes.
+  - Q5: a ruleset on `main` (a PR required, no force pushes or deletion, no bypass) → yes, a task for the user.
+- **Probes:** `systemd-analyze verify` (see check 11); `claude -p` in a systemd user service (see "The timer").
+
 ## Decisions made for this ticket
 
 Decided by the user on 2026-11-18:
@@ -256,4 +264,7 @@ Decided by the user on 2026-11-18:
 - **The runner is a GitHub App, `JD-cookie-Agent`** (2026-11-19). Its PRs and comments are its own, so the user gets notified and can review them, and its tokens last an hour and reach only this repo. A second "machine user" account was the other option: Qodo would review it with no change, but its token may not be limited to one repo. With the App, the user turns on Qodo's bot reviews and skips release-please by its login.
 - **Claude Code (`claude -p`) in its own clone.** It never merges, never pushes (the runner does), and never touches `server/.env` or the development database.
 - **One ticket at a time, and the user starts the timer.**
+- **One agent round on every commit Qodo reviews** (2026-11-19), even when Qodo finds nothing. Qodo's summary has no fixed "all clear" form, so the agent decides what's open. The cost is one short `claude` run before `Ready for review by the user.`
+- **No Workflows permission for the App** (2026-11-19). A PR built by the runner can't change CI, the most sensitive files in a public repo (rule 5). A ticket that changes a workflow stops with `needs-help`, and the user finishes it.
+- **A ruleset on `main`** (2026-11-19): a pull request is required, and force pushes and deletion are blocked, with no bypass. The App's contents permission would otherwise let it push to `main`. The user sets it up (see "Tasks for the user").
 - **No notifications outside GitHub** (2026-11-18): GitHub's own are enough now that the runner is the App. A push service such as ntfy was the other option, but it's an outside service.
