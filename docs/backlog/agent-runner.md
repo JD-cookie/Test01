@@ -37,8 +37,8 @@ What doesn't change:
 - **Agent:** Claude Code in headless mode (`claude -p`), run by the runner in the runner's own clone of the repo.
 - **Round:** one pass of the agent over the review results of one push: Qodo's findings and failed CI jobs. It ends with a push, or with "nothing left to fix".
 - **`needs-help`:** a PR label. The runner adds it when it stops for the user, and does nothing more on that PR while it's there.
-- **The runner's marker:** every comment and reply the runner posts ends with `<!-- test01-agent head=<sha> -->`, naming the PR's head commit when it posted. That's how the runner knows which commit it already ran a round on.
-- **The App:** `JD-cookie-Agent`, a GitHub App installed only on this repo, made by the user on 2026-11-19. GitHub derives its bot user from the name, in lower case: `jd-cookie-agent[bot]`, user id 358547770 (`gh api 'users/jd-cookie-agent[bot]'`). The runner's files and units keep the name `test01-agent`. It's the runner's identity on GitHub: its PRs, comments, labels, and pushes come from `jd-cookie-agent[bot]`, not from the user.
+- **The runner's marker:** every comment and reply the runner posts ends with a hidden `<!-- jd-cookie-agent ... -->` marker. It records which commit a round reviewed and pushed, and when it collected the comments (see "The runner's records" under "Review step").
+- **The App:** `JD-cookie-Agent`, a GitHub App installed only on this repo, made by the user on 2026-11-19. GitHub derives its bot user from the name, in lower case: `jd-cookie-agent[bot]`, user id 358547770 (`gh api 'users/jd-cookie-agent[bot]'`). On this machine, the runner's folders, systemd units, lock file, and comment marker use the same name, `jd-cookie-agent` (renamed from `test01-agent` on 2026-11-19, at the user's request, so there's one name for one thing). It's the runner's identity on GitHub: its PRs, comments, labels, and pushes come from `jd-cookie-agent[bot]`, not from the user.
 
 ## User-facing behavior
 
@@ -55,9 +55,9 @@ The runner pushes, opens PRs, and comments as the App `jd-cookie-agent[bot]` (se
 
 ### One run
 
-`scripts/agent-run.sh` takes no arguments. It works in its own clone, `${XDG_DATA_HOME:-$HOME/.local/share}/test01-agent/repo`, and never in the user's checkout. It clones `origin` there if that clone doesn't exist. Its agent name for claims is `runner-$(hostname -s)`.
+`scripts/agent-run.sh` takes no arguments. It works in its own clone, `${XDG_DATA_HOME:-$HOME/.local/share}/jd-cookie-agent/repo`, and never in the user's checkout. It clones `origin` there if that clone doesn't exist. Its agent name for claims is `runner-$(hostname -s)`.
 
-1. **Lock.** It takes `flock -n` on `${XDG_RUNTIME_DIR}/test01-agent.lock`. If another run holds it, it exits 0. systemd doesn't start a service that's still running, either. The lock also covers runs started by hand. The lock is per machine. A runner on a second machine has another agent name, so it only works on its own claims (step 2), and the two never touch the same PR.
+1. **Lock.** It takes `flock -n` on `${XDG_RUNTIME_DIR}/jd-cookie-agent.lock`. If another run holds it, it exits 0. systemd doesn't start a service that's still running, either. The lock also covers runs started by hand. The lock is per machine. A runner on a second machine has another agent name, so it only works on its own claims (step 2), and the two never touch the same PR.
 2. **Find its work.** It looks only at its own tickets: branches on `origin` whose claim commit, the first commit after `main` on the branch, has the trailer `Claimed-By: runner-<host>` with its own agent name. For each one, it looks up the branch's PRs in every state (`gh pr list --head <branch> --state all`):
    - **A merged or closed PR:** that ticket is over. Skip it. The user deletes its branch when they like; until then, the claim keeps other agents off it.
    - **An open PR with `needs-help`:** nothing to do on it.
@@ -99,7 +99,7 @@ When the user removes `needs-help` from a draft PR, the next run goes on with th
 
 For the open PR without `needs-help`.
 
-**The runner's records.** Everything it posts ends with a hidden marker, `<!-- test01-agent ... -->`, holding the fields below. Every run reads them back from the PR's comments, by `jd-cookie-agent[bot]` only:
+**The runner's records.** Everything it posts ends with a hidden marker, `<!-- jd-cookie-agent ... -->`, holding the fields below. Every run reads them back from the PR's comments, by `jd-cookie-agent[bot]` only:
 - `Agent round N started`, posted before the agent runs: `round=N reviewed=<sha> cutoff=<time>`. The `reviewed` commit is the head commit Qodo reviewed, and `cutoff` is when the runner collected the comments for that round.
 - `Agent round N`, posted when the round is done: the same fields, plus `pushed=<sha>` (the new head commit, or the same one if nothing was pushed), and the agent's replies to inline comments as a JSON block inside the marker.
 - `Ready for review by the user.`: `ready=<sha>`.
@@ -151,7 +151,7 @@ The three prompts live in `scripts/agent-run/` as Markdown files (`build.md`, `f
 ### The App's token
 
 The runner needs a token for every GitHub call and push. It makes a new one before each phase of a run ("One run", step 3). Each lasts an hour. Making one:
-1. **A JWT,** made with `openssl` from the App's private key, `${XDG_CONFIG_HOME:-$HOME/.config}/test01-agent/app.pem`: header `{"alg":"RS256","typ":"JWT"}`, payload `{"iat": <now - 60>, "exp": <now + 540>, "iss": "<client id>"}`, each part base64url-encoded, signed with `openssl dgst -sha256 -sign`. The client ID is in `${XDG_CONFIG_HOME:-$HOME/.config}/test01-agent/app.env`, as `APP_CLIENT_ID=…`. It isn't secret.
+1. **A JWT,** made with `openssl` from the App's private key, `${XDG_CONFIG_HOME:-$HOME/.config}/jd-cookie-agent/app.pem`: header `{"alg":"RS256","typ":"JWT"}`, payload `{"iat": <now - 60>, "exp": <now + 540>, "iss": "<client id>"}`, each part base64url-encoded, signed with `openssl dgst -sha256 -sign`. The client ID is in `${XDG_CONFIG_HOME:-$HOME/.config}/jd-cookie-agent/app.env`, as `APP_CLIENT_ID=…`. It isn't secret.
 2. **The installation:** `GET /repos/<owner>/<repo>/installation`, with the JWT, gives the installation's `id`.
 3. **The token:** `POST /app/installations/<id>/access_tokens` with the JWT, and the body `{"repositories": ["<repo>"]}`, so the token reaches only this repo, even if the App is ever installed on more. Both calls use `curl`, with the `Authorization` header read from a file (`-H @<file>` in a private temporary directory), so the JWT and the token never appear on a command line, where `ps` shows them.
 
@@ -170,9 +170,9 @@ The App's permissions, on this repository only:
 
 ### The timer
 
-`scripts/agent-timer.sh install` writes two units to `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/`, runs `systemctl --user daemon-reload`, and `systemctl --user enable --now test01-agent.timer`:
-- `test01-agent.service`: `Type=oneshot`, `ExecStart=<repo>/scripts/agent-run.sh`, where `<repo>` is the checkout `install` runs from. It sets the `PATH` from the user's shell at install time, so `node`, `npm`, `claude`, and `gh` are found. Probed 2026-11-19: `claude -p` under `systemd-run --user`, with only `PATH` set, answered with the user's Claude login and exited 0. The service's environment has `HOME`, `USER`, `XDG_RUNTIME_DIR`, and `PATH`, but not `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, or `XDG_STATE_HOME`, so the scripts use their defaults (`~/.config`, `~/.local/share`, `~/.local/state`).
-- `test01-agent.timer`: `OnBootSec=5min`, `OnUnitInactiveSec=15min`, so a run starts 15 minutes after the last one ended.
+`scripts/agent-timer.sh install` writes two units to `${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user/`, runs `systemctl --user daemon-reload`, and `systemctl --user enable --now jd-cookie-agent.timer`:
+- `jd-cookie-agent.service`: `Type=oneshot`, `ExecStart=<repo>/scripts/agent-run.sh`, where `<repo>` is the checkout `install` runs from. It sets the `PATH` from the user's shell at install time, so `node`, `npm`, `claude`, and `gh` are found. Probed 2026-11-19: `claude -p` under `systemd-run --user`, with only `PATH` set, answered with the user's Claude login and exited 0. The service's environment has `HOME`, `USER`, `XDG_RUNTIME_DIR`, and `PATH`, but not `XDG_CONFIG_HOME`, `XDG_DATA_HOME`, or `XDG_STATE_HOME`, so the scripts use their defaults (`~/.config`, `~/.local/share`, `~/.local/state`).
+- `jd-cookie-agent.timer`: `OnBootSec=5min`, `OnUnitInactiveSec=15min`, so a run starts 15 minutes after the last one ended.
 
 The runner creates the labels `agent-run` and `needs-help` when it first needs them and they don't exist (`gh label create`, with the App's token). Neither exists in the repo today.
 
@@ -180,11 +180,11 @@ It checks that linger is on (`loginctl show-user "$USER" -p Linger`). If it isn'
 
 `scripts/agent-timer.sh check` runs every check above, and makes a token, without writing or starting anything. `install` runs it first.
 
-`uninstall` disables and stops the timer, and removes both units. It leaves the clone and the logs. `status` prints `systemctl --user list-timers test01-agent.timer` and the last run's log.
+`uninstall` disables and stops the timer, and removes both units. It leaves the clone and the logs. `status` prints `systemctl --user list-timers jd-cookie-agent.timer` and the last run's log.
 
 ### Logs
 
-Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/test01-agent/logs/<UTC time>.log`: each step it took, the commands it ran with their exit codes, and the agent's output. It keeps the last 200 logs. The journal also has each run's output: `journalctl --user -u test01-agent`.
+Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/logs/<UTC time>.log`: each step it took, the commands it ran with their exit codes, and the agent's output. It keeps the last 200 logs. The journal also has each run's output: `journalctl --user -u jd-cookie-agent`.
 
 ## Security and configuration
 
@@ -213,7 +213,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/test01-agent/log
 
 - **Before the real run (check 12), any time before or after this PR merges:**
   1. **Create the App** `JD-cookie-Agent` (done 2026-11-19, and installed on Test01 by the user's account) (GitHub → Settings → Developer settings → GitHub Apps → New GitHub App), as for release-please's App in `docs/devops.md`: no webhook, installable only on this account, with the permissions in "The App's token". Install it on Test01 only.
-  2. **Save its key and client ID** (made 2026-11-19; to be moved from the checkout to `~/.config/test01-agent/`): generate a private key, save it as `~/.config/test01-agent/app.pem` with mode `600`, and write `APP_CLIENT_ID=<client id>` to `~/.config/test01-agent/app.env`.
+  2. **Save its key and client ID** (made 2026-11-19; to be moved from the checkout to `~/.config/jd-cookie-agent/`): generate a private key, save it as `~/.config/jd-cookie-agent/app.pem` with mode `600`, and write `APP_CLIENT_ID=<client id>` to `~/.config/jd-cookie-agent/app.env`.
   3. **Qodo:** turn on "Allow GitHub bot reviews", and add release-please's App to the logins that aren't reviewed: `test01-release-please[bot]` (its login in GitHub's API), and `app/test01-release-please` (as `gh` shows it), since it's not known which form Qodo matches.
   4. **A ruleset for `main`** (Settings → Rules → Rulesets): require a pull request, and block force pushes and deletion, with no bypass. Then nobody, the App included, pushes to `main` except by merging a PR.
 
