@@ -42,7 +42,7 @@ What doesn't change: part 1's build step, the review rules, and the user merges.
 ### Changes to part 1
 
 - **"Find its work":** an open PR **without** `needs-help` goes to the review step (below). An open PR with `needs-help` still gets nothing.
-- **"Stopping for help"** with a PR open: the same steps 1, 2, and 4, but step 3 adds `needs-help` to the PR instead of opening one.
+- **"Stopping for help"** with a PR open: the same steps 1 and 2, then, instead of opening a PR, a comment with what part 1 puts in the draft's description (the reason, the run folder's path, and the output), then the label `needs-help`. Comment first: if the run dies between the two, the PR has no `needs-help`, and the next run's review step stops again and finishes it.
 - **A draft PR:** when the user removes `needs-help` from a draft, the runner marks it ready for review (`gh api graphql`, `markPullRequestReadyForReview`) before it posts `Ready for review by the user.`
 
 ### Review step
