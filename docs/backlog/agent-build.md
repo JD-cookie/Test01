@@ -177,7 +177,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/
 
 - **Before the builder's check 7, any time before this PR merges:**
   1. **Create the App** `JD-cookie-Agent` (done 2026-11-19, and installed on Test01 by the user's account) (GitHub → Settings → Developer settings → GitHub Apps → New GitHub App), as for release-please's App in `docs/devops.md`: no webhook, installable only on this account, with the permissions in "The App's token". Install it on Test01 only.
-  2. **Save its key and client ID** (made 2026-11-19; to be moved from the checkout to `~/.config/jd-cookie-agent/`): generate a private key, save it as `~/.config/jd-cookie-agent/app.pem` with mode `600`, and write `APP_CLIENT_ID=<client id>` to `~/.config/jd-cookie-agent/app.env`.
+  2. **Save its key and client ID** (done 2026-11-19: the folder is mode `700`, both files `600`): generate a private key, save it as `~/.config/jd-cookie-agent/app.pem` with mode `600`, and write `APP_CLIENT_ID=<client id>` to `~/.config/jd-cookie-agent/app.env`.
 
   The builder checks both with `scripts/agent-run.sh check`, which makes a token and changes nothing (check 7).
 - **Before the runner's first real run, after this PR merges at the latest:**
