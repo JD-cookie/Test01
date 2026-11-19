@@ -38,7 +38,7 @@ What doesn't change:
 - **Round:** one pass of the agent over the review results of one push: Qodo's findings and failed CI jobs. It ends with a push, or with "nothing left to fix".
 - **`needs-help`:** a PR label. The runner adds it when it stops for the user, and does nothing more on that PR while it's there.
 - **The runner's marker:** every comment and reply the runner posts ends with `<!-- test01-agent head=<sha> -->`, naming the PR's head commit when it posted. That's how the runner knows which commit it already ran a round on.
-- **The App:** `test01-agent`, a GitHub App installed only on this repo. It's the runner's identity on GitHub: its PRs, comments, labels, and pushes come from `test01-agent[bot]`, not from the user.
+- **The App:** `JD-cookie-Agent`, a GitHub App installed only on this repo, made by the user on 2026-11-19. GitHub derives its bot user from the name, in lower case: `jd-cookie-agent[bot]`, user id 358547770 (`gh api 'users/jd-cookie-agent[bot]'`). The runner's files and units keep the name `test01-agent`. It's the runner's identity on GitHub: its PRs, comments, labels, and pushes come from `jd-cookie-agent[bot]`, not from the user.
 
 ## User-facing behavior
 
@@ -49,7 +49,7 @@ For the user:
 4. If it stops for help, the PR gets the label `needs-help` and a comment that says why. To let it go on, fix what's needed, then remove the label. Removing it resets the retry counts.
 5. Merge, or close the PR, as for any PR.
 
-The runner pushes, opens PRs, and comments as the App `test01-agent[bot]` (see "The App's token"). So the user gets GitHub's notifications for them, and can review its PRs like anyone else's. Qodo reviews them once the user has turned on bot reviews in Qodo, with release-please's App on Qodo's skip list (see "Tasks for the user"): Qodo didn't review release-please's PR #4, because bot reviews were off.
+The runner pushes, opens PRs, and comments as the App `jd-cookie-agent[bot]` (see "The App's token"). So the user gets GitHub's notifications for them, and can review its PRs like anyone else's. Qodo reviews them once the user has turned on bot reviews in Qodo, with release-please's App on Qodo's skip list (see "Tasks for the user"): Qodo didn't review release-please's PR #4, because bot reviews were off.
 
 ## Processing
 
@@ -83,21 +83,21 @@ The runner pushes, opens PRs, and comments as the App `test01-agent[bot]` (see "
 
 ### Review step
 
-For the open PR without `needs-help`. The **last round** is the newest PR comment by `test01-agent[bot]` that starts `Agent round`.
+For the open PR without `needs-help`. The **last round** is the newest PR comment by `jd-cookie-agent[bot]` that starts `Agent round`.
 
 1. **Wait for the review.** Qodo is done with the head commit when its summary comment, the issue comment by `qodo-code-review[bot]` that starts "Code Review by Qodo", contains `<!-- https://github.com/<owner>/<repo>/commit/<head sha> -->`. CI is done when `gh pr checks` has no pending check.
    - **Either isn't done:** exit, and check again next run.
    - **Still not done 60 minutes after the head commit was pushed:** add `needs-help`, with the comment "Qodo or CI hasn't finished reviewing <sha> after 60 minutes." Exit. The push time is the time of the runner's own comment for that head (it comments right after each push), or the PR's creation time for the first head.
 2. **Collect what's new since the last round,** for the round prompt:
    - Qodo's whole summary comment: some findings are only there.
-   - Comments by `qodo-code-review[bot]` and by the repo owner (`gh api repos/<owner>/<repo> --jq .owner.login`) posted after the last round, or since the PR opened: inline review comments, and the PR's own comments. The runner's own comments, by `test01-agent[bot]`, are left out.
+   - Comments by `qodo-code-review[bot]` and by the repo owner (`gh api repos/<owner>/<repo> --jq .owner.login`) posted after the last round, or since the PR opened: inline review comments, and the PR's own comments. The runner's own comments, by `jd-cookie-agent[bot]`, are left out.
    - For each failed CI job, its failed log lines (`gh run view <id> --log-failed`, the last 200 lines).
 
    Comments from anyone else are left out: the repo is public, so anyone can comment, and the agent would read their text as instructions.
 3. **Is a round needed?** A round runs if no round has run on the head commit yet (the last round's marker names another commit, or there is none), or if step 2 found a new comment. Otherwise there's nothing to do: exit.
 
    So every head commit Qodo reviews gets one round, even when Qodo found nothing. The agent decides what's open, from the summary and the comments. It can't be read reliably from the summary alone: on PR #12, with no findings, the summary starts with counts (`🐞 Bugs (0)`, `📘 Rule violations (0)`, `📎 Requirement gaps (0)`). On PR #10, after every finding was fixed, it had no counts, only a "Resolved findings" list, each finding marked `✓ Resolved`.
-4. **Count rounds.** Count the `Agent round` comments by `test01-agent[bot]` since the last time `needs-help` was removed from the PR (the PR's timeline, event `unlabeled`), or since the PR opened. If 4 rounds are done, add `needs-help`, with the comment "Qodo still has findings after 4 rounds." Exit.
+4. **Count rounds.** Count the `Agent round` comments by `jd-cookie-agent[bot]` since the last time `needs-help` was removed from the PR (the PR's timeline, event `unlabeled`), or since the PR opened. If 4 rounds are done, add `needs-help`, with the comment "Qodo still has findings after 4 rounds." Exit.
 5. **Catch up with `main`:** switch the clone to the PR's branch at `origin`, and `git merge origin/main`, as `next-ticket` step 4 says (no rebase, so no force-push). If the merge has a conflict, `git merge --abort`, add `needs-help`, and comment "Merging main has a conflict." Exit.
 6. **Run a round:** run the agent with the round prompt and the collected text. It writes `.agent/round.md`, with each finding, whether it's confirmed, and what it did: fixed (with the commit) or answered (with the reason). It also writes `.agent/replies.json`, with one reply per inline comment: `[{"comment_id": 123, "body": "…"}]`. It updates the design doc's "Delivery and review" section, as `next-ticket` step 4 asks.
 7. **Checks** as in the build step, 3 tries. If they still fail: push, add `needs-help`, and comment with the output. Exit.
@@ -126,7 +126,7 @@ The runner needs a token for every GitHub call and push. It makes a new one at t
 
 The token is handled as an opaque string: GitHub's installation tokens start `ghs_`, are about 520 characters, and contain dots (since GitHub's stateless tokens rolled out, 2026-10-02). Nothing checks its length or shape. It reaches `gh` as `GH_TOKEN`, and `git` through a credential helper that reads it from the environment, with `origin` set to `https://github.com/<owner>/<repo>.git`. It's never written to a file, a log, or a URL. If any step fails, the run logs which one, with the HTTP status, and exits 1.
 
-Commits in the clone, the claim commit included, have the App's bot as author and committer: `test01-agent[bot]` and `<bot user id>+test01-agent[bot]@users.noreply.github.com`, with the id from `GET /users/test01-agent[bot]`. GitHub then shows the commits as the App's.
+Commits in the clone, the claim commit included, have the App's bot as author and committer: `jd-cookie-agent[bot]` and `358547770+jd-cookie-agent[bot]@users.noreply.github.com`, with the id read from `GET /users/jd-cookie-agent[bot]` at run time, not hard-coded. GitHub then shows the commits as the App's.
 
 The App's permissions, on this repository only:
 - **Contents:** read and write, to push branches.
@@ -179,7 +179,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/test01-agent/log
 ## Tasks for the user
 
 - **Before the real run (check 11), any time before or after this PR merges:**
-  1. **Create the App** `test01-agent` (GitHub → Settings → Developer settings → GitHub Apps → New GitHub App), as for release-please's App in `docs/devops.md`: no webhook, installable only on this account, with the permissions in "The App's token". Install it on Test01 only.
+  1. **Create the App** `JD-cookie-Agent` (done 2026-11-19) (GitHub → Settings → Developer settings → GitHub Apps → New GitHub App), as for release-please's App in `docs/devops.md`: no webhook, installable only on this account, with the permissions in "The App's token". Install it on Test01 only.
   2. **Save its key and client ID:** generate a private key, save it as `~/.config/test01-agent/app.pem` with mode `600`, and write `APP_CLIENT_ID=<client id>` to `~/.config/test01-agent/app.env`.
   3. **Qodo:** turn on "Allow GitHub bot reviews", and add release-please's App to the logins that aren't reviewed: `test01-release-please[bot]` (its login in GitHub's API), and `app/test01-release-please` (as `gh` shows it), since it's not known which form Qodo matches.
   4. **A ruleset for `main`** (Settings → Rules → Rulesets): require a pull request, and block force pushes and deletion, with no bypass. Then nobody, the App included, pushes to `main` except by merging a PR. *(Asked in the refinement: see "Decisions".)*
@@ -197,7 +197,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/test01-agent/log
 - `scripts/test/agent-run.test.sh` (new): the tests below. Run by a new `npm run test:scripts` at the root. The root `check` runs it after the server's and the app's checks.
 - `.github/workflows/ci.yml`: a third job, `scripts`, that runs `npm run test:scripts` on `ubuntu-24.04`, following rule 5 like the other two. CI doesn't run the root `check` today: its jobs run the server's and the app's.
 - `.husky/pre-commit`: also runs `npm run test:scripts` when `scripts/` has staged changes.
-- `.gitignore`: `.agent/`.
+- `.gitignore`: `.agent/`, and `*.pem`, which the user added in their checkout on 2026-11-19, so no App key in a working tree is committed.
 - `docs/devops.md`: a section on the runner: what it does, installing, following a run, and stopping it.
 - `AGENTS.md`: a line in the table for the runner.
 
@@ -210,7 +210,7 @@ Checks 1 to 11 are in `scripts/test/agent-run.test.sh`. It runs the runner again
 3. **Check retries:** with the check stub failing every time, the run calls `claude` 3 times in all, then opens a draft PR with `needs-help`. With it failing once, then passing, it opens a normal PR after 2 tries.
 4. **Waits for Qodo:** with an open `agent-run` PR whose Qodo summary names an older commit, a run calls `claude` 0 times and changes nothing. With the push 61 minutes ago, it adds `needs-help`.
 5. **Round:** with a summary for the head commit and one new Qodo inline comment, a run calls `claude` once with the round prompt, which contains that comment's text. It pushes, posts `Agent round 1`, and posts the reply from `replies.json` to that comment's id.
-6. **Only Qodo and the owner:** a comment from another account, containing `IGNORE-ME`, is not in the round prompt. One from the owner is, both inline and on the PR itself. A comment by `test01-agent[bot]`, containing `MINE`, is not.
+6. **Only Qodo and the owner:** a comment from another account, containing `IGNORE-ME`, is not in the round prompt. One from the owner is, both inline and on the PR itself. A comment by `jd-cookie-agent[bot]`, containing `MINE`, is not.
 7. **Round limit:** with 4 `Agent round` comments since the PR opened, a run adds `needs-help` and calls `claude` 0 times. With `needs-help` removed after round 4, the next run runs round 5 as a new round 1.
 8. **Done:** with the summary for the head commit, no round on that head yet, CI green, and the agent stub changing nothing, a run calls `claude` once, posts `Agent round N`, and comments `Ready for review by the user.` A second run calls `claude` 0 times and doesn't comment again.
    - **Main moved on:** with `main` on the bare `origin` one commit ahead of the PR's branch, the round's push holds a merge of `main`. With a conflicting commit on `main` instead, the run adds `needs-help` and calls `claude` 0 times.
@@ -225,7 +225,7 @@ Checks 1 to 11 are in `scripts/test/agent-run.test.sh`. It runs the runner again
     - with the stub answering `401`, the run logs the failed step and exits 1, with no `claude` call
     - with `app.pem` readable by others (mode `644`), `agent-timer.sh install` stops
 11. **Timer units:** `scripts/agent-timer.sh install`, with `XDG_CONFIG_HOME` set to a scratch directory and stubs for `systemctl`, `loginctl`, and `gh`, writes both units. `systemd-analyze verify` on the two files exits 0 and prints no line that names either file. `uninstall` removes them. In `agent-run.test.sh`. Probed 2026-11-19 (systemd 259): `verify` exits 0 even for an unknown key, and only prints a warning, hence the check on its output. `--user verify` fails with no login session, as in CI, while plain `verify` works. A missing `ExecStart` program makes it exit 1.
-12. **The real run** (Day 4 of the hackathon, with the user): with the timer installed and one small ticket `ready` ("Delete expired session rows"), the runner claims it, builds it, opens a PR that Qodo reviews, and runs rounds until it reports `Ready for review by the user.` or stops with `needs-help`. Shown by the PR, its comments, and the runner's logs. Record what happened in this doc's "Delivery and review": who opened the PR (`test01-agent[bot]`), the checks, Qodo's findings, the rounds and retries, and where the user had to step in.
+12. **The real run** (Day 4 of the hackathon, with the user): with the timer installed and one small ticket `ready` ("Delete expired session rows"), the runner claims it, builds it, opens a PR that Qodo reviews, and runs rounds until it reports `Ready for review by the user.` or stops with `needs-help`. Shown by the PR, its comments, and the runner's logs. Record what happened in this doc's "Delivery and review": who opened the PR (`jd-cookie-agent[bot]`), the checks, Qodo's findings, the rounds and retries, and where the user had to step in.
 13. `npm run check` passes locally and in CI, and `docs/devops.md` has the runner's section.
 
 ## Readiness review
@@ -253,7 +253,7 @@ Decided by the user on 2026-11-18:
 - **One step per run, with the state in GitHub.** A reboot or a crash loses nothing, and every run leaves a log.
 - **Retry limits:** 3 tries to get the checks green, 4 Qodo rounds. Then `needs-help`, and the runner waits for the user.
 - **Only Qodo's and the repo owner's comments reach the agent,** because anyone can comment on a public repo.
-- **The runner is a GitHub App, `test01-agent`** (2026-11-19). Its PRs and comments are its own, so the user gets notified and can review them, and its tokens last an hour and reach only this repo. A second "machine user" account was the other option: Qodo would review it with no change, but its token may not be limited to one repo. With the App, the user turns on Qodo's bot reviews and skips release-please by its login.
+- **The runner is a GitHub App, `JD-cookie-Agent`** (2026-11-19). Its PRs and comments are its own, so the user gets notified and can review them, and its tokens last an hour and reach only this repo. A second "machine user" account was the other option: Qodo would review it with no change, but its token may not be limited to one repo. With the App, the user turns on Qodo's bot reviews and skips release-please by its login.
 - **Claude Code (`claude -p`) in its own clone.** It never merges, never pushes (the runner does), and never touches `server/.env` or the development database.
 - **One ticket at a time, and the user starts the timer.**
 - **No notifications outside GitHub** (2026-11-18): GitHub's own are enough now that the runner is the App. A push service such as ntfy was the other option, but it's an outside service.
