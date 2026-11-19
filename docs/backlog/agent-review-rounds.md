@@ -140,7 +140,7 @@ All are in `scripts/test/agent-run.test.sh`, on part 1's scratch setup, with the
    - **Main moved on:** after `Ready for review by the user.`, with `main` on the bare `origin` one commit ahead of the PR's branch, the next run runs a round, and its push holds a merge of `main`.
    - **A draft PR after `needs-help`:** with `needs-help` removed from a draft PR and the round pushing nothing, the run marks the PR ready for review before it posts `Ready for review by the user.`
    - **A conflict with main:** with a conflicting commit on `main`, the run adds `needs-help` and calls `claude` 0 times.
-   - **A workflow change in a round:** with the push stub refusing the round's push, the run adds `needs-help`, and the run folder has the patches.
+   - **A workflow change in a round:** with the push stub refusing the round's push, the run adds `needs-help`, and the run folder has `commits.bundle` with the round's merge of `main`.
    - **`stop.md` in a round:** with the agent stub writing `.agent/stop.md`, the run adds `needs-help` with `stop.md` as the comment, and opens no new PR.
 6. `npm run check` passes locally and in CI, and `docs/devops.md`'s runner section has the review step.
 
