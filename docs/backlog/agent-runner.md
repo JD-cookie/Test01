@@ -139,8 +139,14 @@ Steps:
 
 Each run of the agent is a fresh `claude -p` process in the clone, with no MCP servers (`--strict-mcp-config`), a time limit of 45 minutes (`timeout 45m`), and its output saved to the run's log. Its permissions:
 - **Allowed:** reading files, editing files in the clone, and these shell commands: `npm`, `node`, `npx`, `git status`, `git diff`, `git log`, `git show`, `git add`, `git mv`, `git rm`, `git commit`, `ls`, `cat`, `grep`, `find`, `head`, `tail`, `wc`, `mkdir`.
-- **Denied:** `git push`, `gh`, `curl`, `wget`, and web tools. The runner script does every push and every GitHub call itself, so the agent can't change GitHub, and can't read PR comments the runner left out.
+- **Denied:** `git push`, `gh`, `curl`, `wget`, and any other web access than below. The runner script does every push and every GitHub call itself, so the agent can't change GitHub, and can't read PR comments the runner left out.
+- **Docs on the web** (the user's decision, 2026-11-19): `WebSearch`, and `WebFetch` only for these documentation sites: `docs.expo.dev`, `reactnative.dev`, `nodejs.org`, `developer.mozilla.org`, `fastify.dev`, `www.typescriptlang.org`, `docs.github.com`, `docs.npmjs.com`, `www.npmjs.com`, `sqlite.org`, `valkey.io` (as `WebFetch(domain:<site>)` rules). `app/AGENTS.md` requires the versioned Expo docs before code that touches Expo's APIs. The prompts say to look in `node_modules` first: the docs, type definitions, and READMEs of the exact installed versions. A fetch outside the list is refused, and the run log shows it, so the list can grow from what's missing.
+- **Secret folders:** Claude's permission rules deny `Read` and `Edit` of `~/.config/jd-cookie-agent/**`, `~/.config/gh/**`, and `~/.ssh/**`. These rules are enforced by Claude Code, not by the OS: an allowed `node -e` can still read the files (see "Known gaps").
+
+The permissions are in `scripts/agent-run/settings.json`, passed with `--settings`, so they're reviewed like code. Tools not allowed there are refused, since `claude -p` has nobody to ask.
 - **No token:** the runner starts `claude`, and `npm run check`, with `GH_TOKEN` and the credential helper's variables removed from their environment (`env -u GH_TOKEN …`).
+- **The checks in a sandbox:** `npm run check` runs code the agent wrote, so the runner runs it in `bwrap` (bubblewrap): the whole file system read-only except the clone, `/tmp` (a private `tmpfs`), and the npm cache; empty folders over `~/.config/jd-cookie-agent`, `~/.config/gh`, and `~/.ssh`; and no network. Probed 2026-11-19: inside such a sandbox, `app.pem`, `~/.config/gh/hosts.yml`, and `~/.ssh/github_test01` couldn't be read, the home folder couldn't be written, and the server's tests passed (23 of 23, Valkey's skipped). The network isn't something to turn off: Ubuntu's AppArmor profile for `bwrap` refuses every network socket inside it ("failed to open socket: Permission denied"). That's also why the agent itself can't run in `bwrap`: `claude` couldn't reach its API there (`EAI_AGAIN`).
+- **No hooks on push:** the runner pushes with `git -c core.hooksPath=/dev/null push`. The agent can edit `.husky/`, and a `pre-push` hook it added would otherwise run while the token is in the environment. Commit hooks still run, for the agent's commits.
 - **Valkey:** the agent's checks run without `VALKEY_URL`, so the Valkey tests are skipped there, as `AGENTS.md` describes. CI runs them with a Valkey service on every push, and a failure reaches the next round as a failed CI job.
 
 The three prompts live in `scripts/agent-run/` as Markdown files (`build.md`, `fix-checks.md`, `round.md`), with placeholders the runner fills in. Each one says:
@@ -176,7 +182,7 @@ The App's permissions, on this repository only:
 
 The runner creates the labels `agent-run` and `needs-help` when it first needs them and they don't exist (`gh label create`, with the App's token). Neither exists in the repo today.
 
-It checks that linger is on (`loginctl show-user "$USER" -p Linger`). If it isn't, it says to run `sudo loginctl enable-linger "$USER"`, and installs anyway. It also checks that `claude`, `gh`, `node`, `npm`, `curl`, `openssl`, and `flock` are on `PATH`, that `app.pem` exists and only the user can read it (mode `600`), that `app.env` sets `APP_CLIENT_ID`, and that a token can be made (the steps of "The App's token"), and stops if not. Running `install` again updates the units.
+It checks that linger is on (`loginctl show-user "$USER" -p Linger`). If it isn't, it says to run `sudo loginctl enable-linger "$USER"`, and installs anyway. It also checks that `claude`, `gh`, `node`, `npm`, `curl`, `openssl`, `flock`, and `bwrap` are on `PATH`, that `bwrap` can hide a file (it makes one in a temporary folder and checks it can't be read inside), that `app.pem` exists and only the user can read it (mode `600`), that `app.env` sets `APP_CLIENT_ID`, and that a token can be made (the steps of "The App's token"), and stops if not. Running `install` again updates the units.
 
 `scripts/agent-timer.sh check` runs every check above, and makes a token, without writing or starting anything. `install` runs it first.
 
@@ -207,11 +213,12 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/
 - **Known gaps:**
   - The agent can run `npm` scripts, which can run any code in the repo, like the hooks and tests already do.
   - The time limit doesn't cap cost. `--max-budget-usd` only applies to API keys, and this uses the user's login.
-  - Anyone with the user's account on this machine can read `app.pem`, and with it act as the App on this repo. Revoking the key on the App's page stops that.
+  - **The agent can read the machine's credentials:** it runs as the user, so an allowed command such as `node -e` can read `app.pem`, the user's `gh` token (`~/.config/gh/hosts.yml`), and the deploy key (`~/.ssh/github_test01`, which can push to Test01), despite Claude's rules. It could then send them out through a fetch to a listed site's URL, or through code that a check runs, except that the checks have no network. What limits the damage: the App and the `gh` token reach only this repo, the ruleset keeps everyone off `main` except by a merged PR, and the user can revoke the App key or the deploy key on GitHub. Closing the gap is two backlog items (the user's decision, 2026-11-19): "Run the runner's agent as its own Linux user", then "A credential broker for the runner".
+  - Anyone else with the user's account on this machine can read `app.pem` too, and act as the App on this repo. Revoking the key on the App's page stops that.
 
 ## Tasks for the user
 
-- **Before the real run (check 12), any time before or after this PR merges:**
+- **Before the real run (check 13), any time before or after this PR merges:**
   1. **Create the App** `JD-cookie-Agent` (done 2026-11-19, and installed on Test01 by the user's account) (GitHub → Settings → Developer settings → GitHub Apps → New GitHub App), as for release-please's App in `docs/devops.md`: no webhook, installable only on this account, with the permissions in "The App's token". Install it on Test01 only.
   2. **Save its key and client ID** (made 2026-11-19; to be moved from the checkout to `~/.config/jd-cookie-agent/`): generate a private key, save it as `~/.config/jd-cookie-agent/app.pem` with mode `600`, and write `APP_CLIENT_ID=<client id>` to `~/.config/jd-cookie-agent/app.env`.
   3. **Qodo:** turn on "Allow GitHub bot reviews", and add release-please's App to the logins that aren't reviewed: `test01-release-please[bot]` (its login in GitHub's API), and `app/test01-release-please` (as `gh` shows it), since it's not known which form Qodo matches.
@@ -219,7 +226,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/
 
   The builder checks 1 and 2 with `scripts/agent-timer.sh check`, which makes a token and starts nothing, and 4 with `gh api repos/<owner>/<repo>/rules/branches/main`, which lists the rules. Step 3 shows on the first real PR: Qodo reviews it. The next release PR shows that Qodo still skips release-please.
 - **After this PR merges:** run `scripts/agent-timer.sh install` on the machine. The builder can't, because it starts the timer, and the timer should run the merged `main`. Check: `scripts/agent-timer.sh status` shows the timer.
-- **After that:** the real run (check 12). It happens after this PR merges, so its results go in a follow-up docs PR to this feature's "Delivery and review", as ticket 003's last checks did in PR #12.
+- **After that:** the real run (check 13). It happens after this PR merges, so its results go in a follow-up docs PR to this feature's "Delivery and review", as ticket 003's last checks did in PR #12.
 - **Already done on this machine (2026-11-18):** linger is on.
 
 ## Implementation map
@@ -237,7 +244,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/
 
 ## Acceptance checks
 
-Checks 1 to 11 are in `scripts/test/agent-run.test.sh`. It runs the runner against a scratch setup: a local bare repo as `origin`, holding a copy of the backlog with one `ready` ticket; stub `gh`, `claude`, and `curl` commands first on `PATH` (the `curl` stub answers the two token calls with a fake token of 520 characters, `ghs_` and two dots, as GitHub's are; the `gh` fixtures for Qodo's comments are copies of real ones from PRs #10 and #12, which start with a blank line or `<h3>`), which record how they were called and answer from fixture files; and `npm run check` replaced by a stub that passes or fails on cue. Each check passes when the script prints `ok N`, and CI runs it.
+Checks 1 to 12 are in `scripts/test/agent-run.test.sh`. It runs the runner against a scratch setup: a local bare repo as `origin`, holding a copy of the backlog with one `ready` ticket; stub `gh`, `claude`, and `curl` commands first on `PATH` (the `curl` stub answers the two token calls with a fake token of 520 characters, `ghs_` and two dots, as GitHub's are; the `gh` fixtures for Qodo's comments are copies of real ones from PRs #10 and #12, which start with a blank line or `<h3>`), which record how they were called and answer from fixture files; and `npm run check` replaced by a stub that passes or fails on cue. Each check passes when the script prints `ok N`, and CI runs it.
 
 1. **No ticket:** with no `ready` ticket, a run claims nothing, calls `claude` 0 times, and logs `no ready ticket`.
 2. **Build:** with one `ready` ticket, a run creates its claim branch on the bare `origin`, calls `claude` once with the build prompt, runs the check stub once, pushes the branch, and calls `gh pr create` with the label `agent-run` and the title from `.agent/pr.md`.
@@ -268,9 +275,14 @@ Checks 1 to 11 are in `scripts/test/agent-run.test.sh`. It runs the runner again
     - the token's text appears in no log file, and in no command line the stubs record, `claude`'s included, and `claude`'s environment has no `GH_TOKEN`
     - with the stub answering `401`, the run logs the failed step and exits 1, with no `claude` call
     - with `app.pem` readable by others (mode `644`), `agent-timer.sh check` and `install` stop, and `check` writes no unit
-11. **Timer units:** `scripts/agent-timer.sh install`, with `XDG_CONFIG_HOME` set to a scratch directory and stubs for `systemctl`, `loginctl`, and `gh`, writes both units. `systemd-analyze verify` on the two files exits 0 and prints no line that names either file. `uninstall` removes them. In `agent-run.test.sh`. Probed 2026-11-19 (systemd 259): `verify` exits 0 even for an unknown key, and only prints a warning, hence the check on its output. `--user verify` fails with no login session, as in CI, while plain `verify` works. A missing `ExecStart` program makes it exit 1.
-12. **The real run** (Day 4 of the hackathon, with the user): with the timer installed and one small ticket `ready` ("Delete expired session rows"), the runner claims it, builds it, opens a PR that Qodo reviews, and runs rounds until it reports `Ready for review by the user.` or stops with `needs-help`. Shown by the PR, its comments, and the runner's logs. Record what happened in this doc's "Delivery and review", in a follow-up docs PR (see "Tasks for the user"): who opened the PR (`jd-cookie-agent[bot]`), the checks, Qodo's findings, the rounds and retries, and where the user had to step in.
-13. `npm run check` passes locally and in CI, and `docs/devops.md` has the runner's section.
+11. **The agent's limits:** with the `claude` stub recording its arguments and environment, and a `bwrap` stub recording its own:
+    - `claude` gets `--settings scripts/agent-run/settings.json`, and that file allows `WebSearch` and exactly the listed `WebFetch` domains, and denies `Read` and `Edit` of the three secret folders
+    - `npm run check` runs only through `bwrap`, with `--ro-bind / /`, the clone bound writable, `--tmpfs` over the three secret folders and `/tmp`, and no `GH_TOKEN` in its environment
+    - every push has `core.hooksPath=/dev/null`: a `pre-push` hook in the clone's `.husky/` that writes a file doesn't run
+    - with a real `bwrap`, when the machine has one (skipped in CI if it doesn't), a check stub that tries to read a file under a fake secret folder fails to read it
+12. **Timer units:** `scripts/agent-timer.sh install`, with `XDG_CONFIG_HOME` set to a scratch directory and stubs for `systemctl`, `loginctl`, and `gh`, writes both units. `systemd-analyze verify` on the two files exits 0 and prints no line that names either file. `uninstall` removes them. In `agent-run.test.sh`. Probed 2026-11-19 (systemd 259): `verify` exits 0 even for an unknown key, and only prints a warning, hence the check on its output. `--user verify` fails with no login session, as in CI, while plain `verify` works. A missing `ExecStart` program makes it exit 1.
+13. **The real run** (Day 4 of the hackathon, with the user): with the timer installed and one small ticket `ready` ("Delete expired session rows"), the runner claims it, builds it, opens a PR that Qodo reviews, and runs rounds until it reports `Ready for review by the user.` or stops with `needs-help`. Shown by the PR, its comments, and the runner's logs. Record what happened in this doc's "Delivery and review", in a follow-up docs PR (see "Tasks for the user"): who opened the PR (`jd-cookie-agent[bot]`), the checks, Qodo's findings, the rounds and retries, and where the user had to step in.
+14. `npm run check` passes locally and in CI, and `docs/devops.md` has the runner's section.
 
 ## Readiness review
 
@@ -297,7 +309,7 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5).
   4. pass, the largest ticket yet: scripts, one CI job, and docs. The timer alone or the runner alone wouldn't deliver a run on a schedule, so it stays one ticket
   5. pass: every label, comment text, file path, exit code, and App permission is given
   6. pass: the App, its key, Qodo's settings, the ruleset, and installing the timer, each with when and how the builder checks it
-  7. pass: checks 1 to 11 run against stubs and a bare `origin`, with `ok N` as the result; check 12 is the real run
+  7. pass: checks 1 to 12 run against stubs and a bare `origin`, with `ok N` as the result; check 13 is the real run
   8. pass: each rule, in "Security and configuration"
   9. pass: who triggers it, the failure modes, the token's handling, the known gaps
   10. pass: Q1 to Q5 answered, below
@@ -307,7 +319,11 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5).
   - Q3: probe `claude -p` under `systemd-run --user` → yes: it worked (see "The timer").
   - Q4: no Workflows permission for the App, and `needs-help` for a ticket that changes a workflow → yes.
   - Q5: a ruleset on `main` (a PR required, no force pushes or deletion, no bypass) → yes, a task for the user.
-- **Probes:** `systemd-analyze verify` (see check 11); `claude -p` in a systemd user service (see "The timer").
+  - Q6: keep the App key from the agent → the user asked how; a probe showed `claude` can't run in `bwrap` here (AppArmor blocks its network). Options: (A) the agent as its own Linux user, (B) Claude's permission rules plus the checks in `bwrap`, or a credential broker, which the user suggested. → B now, with backlog rows for A and the broker (2026-11-19).
+  - Q7: web access for docs → `WebSearch`, and `WebFetch` only for documentation sites, `node_modules` first (2026-11-19).
+  - Q8: round 2's reviewers, after a tie (14 kept each) → both again.
+  - Naming: the runner's local folders, units, lock, and marker → `jd-cookie-agent`, like the App (the user's request, 2026-11-19).
+- **Probes:** `systemd-analyze verify` (see check 12); `bwrap` hiding files, blocking the network, and running the server's tests (see "The agent"); `claude -p` in a systemd user service (see "The timer").
 - **Review round 1:** Codex (gpt-6.1-sol) and opencode (ollama-cloud/kimi-k3.1-pro), run separately. Both restatements match the goal. They made 28 findings, 14 each. 7 problems were found by both, so 21 in all. All were kept: 19 fixed in the doc, 2 turned into questions (Q6, Q7).
   - Both: a merged or closed PR looked like a crashed build (only open PRs were listed). Fixed: PRs in every state, by branch.
   - Both: one token at the start of a run could expire before its last push (3 tries × 45 minutes). Fixed: a token per phase, with a test.
@@ -346,4 +362,6 @@ Decided by the user on 2026-11-18:
 - **One agent round on every commit Qodo reviews** (2026-11-19), even when Qodo finds nothing. Qodo's summary has no fixed "all clear" form, so the agent decides what's open. The cost is one short `claude` run before `Ready for review by the user.`
 - **No Workflows permission for the App** (2026-11-19). A PR built by the runner can't change CI, the most sensitive files in a public repo (rule 5). A ticket that changes a workflow stops with `needs-help`, and the user finishes it.
 - **A ruleset on `main`** (2026-11-19): a pull request is required, and force pushes and deletion are blocked, with no bypass. The App's contents permission would otherwise let it push to `main`. The user sets it up (see "Tasks for the user").
+- **Keeping credentials from the agent, for now** (2026-11-19): Claude's permission rules deny the secret folders, the checks run in `bwrap` with no network, the token is never in the agent's or the checks' environment, and pushes run no hooks. The agent can still read the files with an allowed command: a known gap. The other options, both for later backlog items: the agent as its own Linux user (the OS hides every credential, but it needs `sudo` once and a `claude login` as that user), and a credential broker, a small service as another user that holds the key and does only the runner's actions (it hides the App key, but not the user's `gh` token or deploy key, and it's the most new code). `claude` can't run in `bwrap` on this machine, so the sandbox can't hold the agent itself.
+- **Docs on the web** (2026-11-19): `WebSearch`, and `WebFetch` for the documentation sites in "The agent". Agents need API docs while building, and `app/AGENTS.md` requires Expo's. An open `WebFetch` would add any site's text as input, and with the known gap above, a way to send a credential out.
 - **No notifications outside GitHub** (2026-11-18): GitHub's own are enough now that the runner is the App. A push service such as ntfy was the other option, but it's an outside service.
