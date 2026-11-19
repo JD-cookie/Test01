@@ -189,7 +189,8 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/
   4. **A ruleset for `main`** (Settings → Rules → Rulesets): require a pull request, and block force pushes and deletion, with no bypass. Then nobody, the App included, pushes to `main` except by merging a PR.
 
   The builder checks 4 with `gh api repos/<owner>/<repo>/rules/branches/main`, which must list `pull_request`, `non_fast_forward`, and `deletion`, and `gh api repos/<owner>/<repo>/rulesets/<id>`, which must show `"enforcement": "active"` and no `bypass_actors`. If the user's token can't read `bypass_actors`, the builder asks the user to confirm "Bypass list: empty" on the ruleset's page. Step 3 shows on the runner's first real PR: Qodo reviews it. The next release PR shows that Qodo still skips release-please.
-- **The first real run** is part 3's, with the timer, on ticket 004 for Day 4 of the hackathon. This part has no real run of its own: a run by hand needs a `ready` ticket, and 004 is kept for Day 4.
+- **After this PR merges, before part 3 (Q9):**
+  5. **A second small ticket for a real run by hand:** pick a small backlog item other than 004, refine it with `refine-ticket`, and mark it `ready` as usual. Then, on `main`, run `scripts/agent-run.sh` by hand (check 9). Ticket 004 stays kept for part 3's real run on Day 4.
 
 ## Implementation map
 
@@ -239,6 +240,7 @@ Checks 1 to 6 are in `scripts/test/agent-run.test.sh`. It runs the runner agains
    - with a real `bwrap`, when the machine has one (skipped in CI if it doesn't), a check stub that tries to read a file under a fake secret folder fails to read it, and one that connects to a listener the test started on `127.0.0.1`, which it reached from outside first, fails. `agent-run.sh check` makes the same tries, and fails if the sandbox reads the file or reaches the listener
 7. **The real setup:** on the user's machine, after tasks 1 and 2, `scripts/agent-run.sh check` passes every check, including making a token, and nothing changes on GitHub. The builder records its output, without the token, in "Delivery and review".
 8. `npm run check` passes locally and in CI, and `docs/devops.md` has the runner's section.
+9. **The real run by hand** (after this PR merges, with the user; Q9): with tasks 1 to 5 done and one small ticket `ready` (not 004), `scripts/agent-run.sh` on `main` claims it, builds it with the real `claude`, gets the checks green, and opens a PR as `jd-cookie-agent[bot]`, or stops with a draft PR and `needs-help`. Shown by the PR and the runner's log. Qodo reviews the PR, which shows task 3 works, and the user takes it through review and merges, since rounds are part 2's. It happens after this PR merges, so what happened goes in a follow-up docs PR to this feature's "Delivery and review", as ticket 003's last checks did in PR #12: who opened the PR, the tries and checks, Qodo's findings, and where the user had to step in.
 
 ## Readiness review
 
@@ -267,10 +269,10 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5), as the whole of "An agent t
   4. pass: scripts, one CI job, and docs, in one PR. It ships alone: a run by hand builds a ticket into a PR
   5. pass: every label, comment text, file path, exit code, and App permission is given
   6. pass: the App, its key, Qodo's settings, and the ruleset, each with when and how the builder checks it
-  7. pass, with a gap: checks 1 to 6 run against stubs and a bare `origin`, with `ok N` as the result, and check 7 is the real setup. No check in this part runs a real build with the real `claude` and GitHub: the first is part 3's real run, on ticket 004 (Q9)
+  7. pass: checks 1 to 6 run against stubs and a bare `origin`, with `ok N` as the result, check 7 is the real setup, and check 9 is a real build by hand with the real `claude` and GitHub, on a second small ticket, after the merge (Q9)
   8. pass: each rule, in "Security and configuration"
   9. pass: who triggers it, the failure modes, the token's handling, the known gaps
-  10. not yet: Q9 is open. The rest are answered. It has to be answered, and recorded, before this part is marked ready
+  10. pass: Q1 to Q9 are answered and recorded
 - **Questions and answers** (all three parts):
   - Q1: the runner's own GitHub identity, as a GitHub App → yes (2026-11-19). The user made `JD-cookie-Agent` and turns on Qodo's bot reviews, skipping release-please by login.
   - Q2: one agent round on every commit Qodo reviews, even with no findings → yes (part 2).
@@ -282,7 +284,7 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5), as the whole of "An agent t
   - Q8: round 2's reviewers, after a tie (14 kept each) → both again.
   - Naming: the runner's local folders, units, lock, and marker → `jd-cookie-agent`, like the App (the user's request, 2026-11-19).
   - Split → yes, into three parts (2026-11-19).
-  - Q9: a real run of this part by hand, before part 3, needs a `ready` ticket other than 004 → open, asked after review round 3.
+  - Q9: a real run of this part by hand, before part 3, needs a `ready` ticket other than 004 → yes (2026-11-19): a second small ticket, refined and marked ready after this part merges, and run by hand (task 5, check 9).
 - **Probes:** `systemd-analyze verify` (part 3); `bwrap` hiding files, blocking the network, and running the server's tests (see "The agent"); `claude -p` in a systemd user service (part 3).
 - **Review round 1 (the whole):** Codex (gpt-6.1-sol) and opencode (ollama-cloud/kimi-k3.1-pro), run separately. Both restatements match the goal. They made 28 findings, 14 each. 7 problems were found by both, so 21 in all. All were kept: 19 fixed in the doc, 2 turned into questions (Q6, Q7).
   - Both: a merged or closed PR looked like a crashed build (only open PRs were listed). Fixed: PRs in every state, by branch.

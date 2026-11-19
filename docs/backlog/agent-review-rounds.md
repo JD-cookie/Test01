@@ -144,7 +144,7 @@ All are in `scripts/test/agent-run.test.sh`, on part 1's scratch setup, with the
    - **`stop.md` in a round:** with the agent stub writing `.agent/stop.md`, the run adds `needs-help` with `stop.md` as the comment, and opens no new PR.
 6. `npm run check` passes locally and in CI, and `docs/devops.md`'s runner section has the review step.
 
-The first real round is part 3's real run, on ticket 004.
+The first real round is part 3's real run, on ticket 004. Part 1's real run by hand (its check 9) comes before, but the user takes that PR through review.
 
 ## Readiness review
 
