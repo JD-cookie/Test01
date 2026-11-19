@@ -30,3 +30,4 @@ One row per reviewer per round. **Kept** findings were fixed in the doc or turne
 | 2026-11-19 | A runner that builds a ready ticket into a PR | 3 | opencode | ollama-cloud/deepseek-v4-pro | 4 | 0 | 0 |
 | 2026-11-19 | A runner that builds a ready ticket into a PR | 4 | Codex | gpt-6.1-sol | 6 | 0 | 0 |
 | 2026-11-19 | A runner that builds a ready ticket into a PR | 4 | opencode | ollama-cloud/deepseek-v4-pro | 5 | 0 | 0 |
+| 2026-11-19 | A runner that builds a ready ticket into a PR | 5 | Codex | gpt-6.1-sol | 2 | 0 | 0 |
