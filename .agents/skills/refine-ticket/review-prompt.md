@@ -19,6 +19,8 @@ You are reviewing a design doc for a ticket in this repository, before anyone bu
 
 <For round 2 and later: each earlier finding, and what was done about it. Check that each fix holds, and look for new gaps too.>
 
+Report only **blocking** findings this round (see "Report"). Leave out minor ones.
+
 ## Report
 
 Reply with exactly these two parts.
@@ -34,6 +36,7 @@ Reply with exactly these two parts.
 
 For each finding, give:
 - **What:** the problem, in one or two sentences
+- **Severity:** **blocking** if a build that follows the doc would come out wrong, or a builder would have to ask or guess; **minor** otherwise, such as wording, or a detail any builder would settle the same way
 - **Definition of Ready item:** its number, if one applies
 - **Evidence:** the file and line it relies on, quoted. For a **needs a run** finding, the command to run and the output that would confirm it. A finding without evidence will be dropped, so leave out anything you can't back up.
 - **Suggested fix:** one sentence

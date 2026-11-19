@@ -70,9 +70,11 @@ Come back here whenever a later step turns up a new decision.
 
 Each reviewer is a **fresh agent**: a new process with none of this conversation, which gets only the repo and the doc, the way the building agent will. It runs **read-only**. It reports, and you make the edits.
 
-**Round 1 has two reviewers**, run separately, so neither sees the other's report. Use the two agents that aren't you, where they're installed: if you are Claude Code, Codex and opencode; if you are Codex, Claude Code and opencode; and so on. If only one other agent is installed, the second reviewer is a fresh session of your own CLI. If no other agent is installed, both are fresh sessions of your own CLI.
+**Every round has two reviewers**, run separately, so neither sees the other's report, and the same two agents in every round of a refinement. Use the two agents that aren't you, where they're installed: if you are Claude Code, Codex and opencode; if you are Codex, Claude Code and opencode; and so on. If only one other agent is installed, the second reviewer is a fresh session of your own CLI. If no other agent is installed, both are fresh sessions of your own CLI.
 
-**Later rounds have one reviewer:** a fresh session of the round-1 reviewer whose findings were the most useful, meaning it had the most findings **kept** (fixed in the doc, or turned into a question for the user) rather than answered or dropped. If the two were about even, ask the user which one to keep. A later round's prompt also includes the earlier rounds' findings and what was done about each, so the reviewer checks the fixes as well as looks for new gaps.
+Each round's reviewers are fresh sessions. Two reviewers find different problems: in two rounds of one refinement, they made 24 findings that held up, and none was found by both. A later round's prompt also includes the earlier rounds' findings and what was done about each, so the reviewers check the fixes as well as look for new gaps. From round 2 on, the prompt asks only for **blocking** findings.
+
+**Blocking findings:** a finding is blocking if a build that follows the doc would come out wrong (a broken check, a missed case, a wrong assumption about the code), or if a builder would have to ask or guess. Everything else, such as wording or a detail a builder would settle the same way anyway, is **minor**. Each finding the reviewer reports says which it is. You decide, when you check it: a minor finding that would change the build is blocking.
 
 **The review copy.** Reviewers never run in your checkout. Before each round, commit the doc changes so far on the refinement branch (`docs(repo): refine <title>`; later rounds add commits), and make a throwaway clone in a scratch directory outside the checkout:
 
@@ -93,7 +95,7 @@ A clone has only committed files: none of the ignored ones, such as `server/.env
 | opencode | `cd "$rc" && opencode run --standalone --agent plan -m "$model" "$(cat "$prompt")" > "$out"`, with `$model` chosen from [`reviewers.md`](reviewers.md) (below) | The `opencode.json` copied into the clone, which overrides user settings for the `plan` agent: everything denied except the `read`, `grep`, `glob`, and `list` tools. No shell, edits, subagents, or web. Check it from `$rc` with `opencode debug agents --standalone`: the plan agent's rules must start `* * deny` and allow only those four. `--standalone` makes opencode read the config fresh: its background service caches each directory's config the first time it sees it. |
 | Claude Code | `cd "$rc" && claude -p --permission-mode plan --tools Read,Grep,Glob --strict-mcp-config < "$prompt" > "$out"` | Only the `Read`, `Grep`, and `Glob` tools exist in the session, with no MCP servers, in plan mode. |
 
-Run the round-1 reviewers in parallel if you can (for example, two background commands), or one after the other. A review can take several minutes: allow up to 15 before treating it as stuck. Note the model each one used: `codex` prints it in its header, and opencode prints it on each step (`> plan · <model>`). **opencode's model** is the one of the candidates in [`reviewers.md`](reviewers.md) with the fewest rows in its results table, and the one higher in the list on a tie. So each model gets tried in turn, and a model added to the list later is tried next. Codex and Claude use their configured default. If one of those is a small model, ask the user which model to use.
+Run each round's two reviewers in parallel if you can (for example, two background commands), or one after the other. A review can take several minutes: allow up to 15 before treating it as stuck. Note the model each one used: `codex` prints it in its header, and opencode prints it on each step (`> plan · <model>`). **opencode's model** is the one of the candidates in [`reviewers.md`](reviewers.md) with the fewest rows in its results table, and the one higher in the list on a tie, chosen in round 1 and kept for the refinement's later rounds. So each model gets tried in turn, and a model added to the list later is tried next. Codex and Claude use their configured default. If one of those is a small model, ask the user which model to use.
 
 Only Codex has a shell, and its sandbox is enforced by the OS. The other two can only read files. Allowing some shell commands isn't read-only: `git diff --output=<file>`, for one, writes a file. So reviewers don't run tests or probes. A claim that only running something can check comes back as a "needs a run" finding, and you run it, as a probe.
 
@@ -111,11 +113,11 @@ If anything changed, stop, and tell the user what changed and which reviewer ran
 
 **Record the round** in the results table of [`reviewers.md`](reviewers.md): one row per reviewer, with the date, the item's title, the round, the agent, the model, and its kept, answered, and dropped counts. It goes in the refinement's commit, with the doc.
 
-After the fixes, run the next round. Stop when a round has no kept findings. After three rounds with kept findings still coming, stop and ask the user how to go on.
+After the fixes, run the next round. Stop when a round has no kept **blocking** findings: fix its minor ones, and don't run another round for them. After five rounds with kept blocking findings still coming, stop and ask the user how to go on.
 
 ## 8. Ask the user for approval
 
-When every Definition of Ready item passes or doesn't apply, and the last review round had nothing kept, write the doc's **Readiness review** section (below). If the row says "Blocked by: …" and something it names isn't built yet, tell the user the doc is ready but the item can't be marked `ready` until then, and stop. Otherwise, show the user:
+When every Definition of Ready item passes or doesn't apply, and the last review round had no kept blocking findings, write the doc's **Readiness review** section (below). If the row says "Blocked by: …" and something it names isn't built yet, tell the user the doc is ready but the item can't be marked `ready` until then, and stop. Otherwise, show the user:
 - the goal, restated
 - the Definition of Ready results
 - what changed in the doc, and the questions and answers
@@ -206,9 +208,8 @@ Refined <date> by <agent> (<model>).
 - **Questions and answers:** Q1 … → … (one line each)
 - **Review round 1:** <agent> (<model>) and <agent> (<model>).
   - <agent>'s restatement: …
-  - Finding 1: <claim>. Evidence: <file:line or command>. Done: fixed / answered / asked the user.
+  - Finding 1 (blocking / minor): <claim>. Evidence: <file:line or command>. Done: fixed / answered / asked the user.
   - Dropped: N (reason each).
-  - Kept for later rounds: <agent>, because …
 - **Review round 2:** …
 - **Approved by the user:** <date>
 ```
