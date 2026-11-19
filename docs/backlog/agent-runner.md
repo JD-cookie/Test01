@@ -246,6 +246,17 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5).
   - `systemd-analyze` (probed): `--user verify` fails without a login session, and `verify` exits 0 on unknown keys. Check 10 rewritten.
   - The `gh` token expires 2027-01-11: a known gap.
 
+- **Definition of Ready:**
+  1. pass: the Summary says who it's for, what changes, and what doesn't
+  2. pass: see "Is it needed"
+  3. pass: an out-of-scope list; reviews by our own agents are their own row
+  4. pass, the largest ticket yet: scripts, one CI job, and docs. The timer alone or the runner alone wouldn't deliver a run on a schedule, so it stays one ticket
+  5. pass: every label, comment text, file path, exit code, and App permission is given
+  6. pass: the App, its key, Qodo's settings, the ruleset, and installing the timer, each with when and how the builder checks it
+  7. pass: checks 1 to 11 run against stubs and a bare `origin`, with `ok N` as the result; check 12 is the real run
+  8. pass: each rule, in "Security and configuration"
+  9. pass: who triggers it, the failure modes, the token's handling, the known gaps
+  10. pass: Q1 to Q5 answered, below
 - **Questions and answers:**
   - Q1: the runner's own GitHub identity, as a GitHub App → yes (2026-11-19). The user made `JD-cookie-Agent` and turns on Qodo's bot reviews, skipping release-please by login.
   - Q2: one agent round on every commit Qodo reviews, even with no findings → yes.
