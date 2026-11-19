@@ -233,6 +233,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/
 
 - `scripts/agent-run.sh` (new): one run, as in "Processing".
 - `scripts/agent-run/build.md`, `fix-checks.md`, `round.md` (new): the agent's prompts.
+- `scripts/agent-run/settings.json` (new): the agent's Claude permissions ("The agent").
 - `scripts/agent-timer.sh` (new): `install`, `uninstall`, `status`.
 - `scripts/agent-token.sh` (new): makes the App's token ("The App's token"), and prints it only to a file descriptor the runner reads. Used by `agent-run.sh` and `agent-timer.sh install`.
 - `scripts/test/agent-run.test.sh` (new): the tests below. Run by a new `npm run test:scripts` at the root. The root `check` runs it after the server's and the app's checks.
