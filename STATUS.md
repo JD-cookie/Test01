@@ -19,12 +19,20 @@ Last updated 2026-11-18. This is a handoff note between working sessions. The sy
   - PR #7 (merged 2026-11-16): the backlog is the ticket system, with a `ready` status, a number given when a ticket is marked ready, and claims made by creating the ticket's branch. Adds `scripts/ticket.sh` (`list`, `claim next`, `claim NNN-slug`, `verify`) and the `next-ticket` skill (in `.agents/skills/`, with `.claude/skills` a symlink to it, so Claude Code, Codex, and opencode all find it).
   - PR #8 (merged 2026-11-17): a designed backlog item for a `refine-ticket` skill (Definition of Ready, interview with `grilling`, vertical slices, adversarial review with evidence from two reviewers in round 1 and then the more useful one, then the user's approval before `ready`), compared against Matt Pocock's skills and pstack. Also adds the `grilling` skill, copied from Matt Pocock's skills (MIT, pinned to upstream commit 7739eae).
   - PR #9 (merged 2026-11-17): marks `refine-ticket` ready as ticket 003, at the user's request. `scripts/ticket.sh list` shows `003-refine-ticket-skill  ready`.
-  - Designed, not ready: delete expired sessions, and the server container image. The user moved both back from `ready` before #7 merged.
-  - Ticket 003 is being built: claimed 2026-11-17 (claim `37dc4f12`), PR #10 (https://github.com/JD-cookie/Test01/pull/10), branch `003-refine-ticket-skill`. Acceptance checks 1, 5–9, and 11 pass. Checks 2 and 3 need the user: a real refinement of "Delete expired session rows", with Codex and opencode as reviewers.
-  - 2026-11-18: the user chose the row recheck for "A merged ticket gets a second ready PR" (step 9.6), and asked to run checks 2 and 3 on "Delete expired session rows" (refined on a local `refine-` branch).
-  - The refinement is paused on local branch `refine-delete-expired-sessions` (facts and checks written, one local commit). Waiting on the user's answers to the round-1 questions and the opencode model rotation. The user wants #10 merged first, because the review copy needs the Definition of Ready on `main`.
-  - Found during that run, fixed in #10: Claude Code replaced `$2` in the skill's awk commands with an argument word.
-  - **Next:** run check 2 with the user, record it in the doc's "Delivery and review", take #10 through review. The user marks the other tickets `ready` when satisfied with them.
+  - Designed, not ready: the server container image. (Delete expired sessions is now ticket 004.) The user moved both back from `ready` before #7 merged.
+  - PR #10 (merged 2026-11-18): ticket 003, the `refine-ticket` skill and the Definition of Ready. Qodo's 13 findings were all fixed. Acceptance checks 1, 5–9, and 11 pass; 2 and 3 (the interview and the user's approval) are being run on "Delete expired session rows".
+  - Added during #10's review, at the user's request: the row recheck in step 9.6, the Item-column match, `awk -v c=…` so Claude Code's argument substitution can't rewrite `$2`, and the opencode model rotation with a results table (`.agents/skills/refine-ticket/reviewers.md`).
+  - Refinement of "Delete expired session rows": four review rounds (Codex and opencode in rounds 1 and 4, opencode in 2 and 3): 21 findings kept and 1 dropped, all fixed, recorded in the doc and in `reviewers.md`.
+  - The user approved it on 2026-11-18, after round 4. It's ticket 004, in the ready PR from branch `ready-004` (see "Open PRs").
+  - **Next:** after the ready PR merges, record 003's acceptance checks 2 and 3 (the interview and the user's approval) in 003's "Delivery and review", in a follow-up PR.
+
+- **Day 4** (make the agent pick up work automatically, from a schedule or a tag; one small ticket; it builds, runs the checks, opens a PR for Qodo, fixes confirmed findings, with a retry limit; the user merges).
+  - #10 doesn't qualify: it was started in a session. The ticket for it is 004, "Delete expired session rows".
+  - Checked 2026-11-18: systemd's user manager runs, and the account has linger on, so a user timer runs while logged out. Every PR so far is from the user's account except release-please's, which Qodo didn't review.
+  - The user answered the six runner questions (2026-11-18): yes to all, with 4 Qodo rounds instead of 3, and an install script for the timer. They also asked for a backlog idea: code reviews by our own agents, reusing existing review skills.
+  - Drafted: `docs/backlog/agent-runner.md` and the two backlog rows, on local branch `refine-agent-runner` (worktree in the session scratchpad), two local commits, not pushed. The user decided 2026-11-18: no notifications outside GitHub for now; the user checks the `agent-run` PRs.
+  - The original proposal: a systemd user timer running `scripts/agent-run.sh` every 15 minutes, one step per run with the state in GitHub, `claude -p` in its own clone, at most 3 tries at green checks and 3 Qodo fix rounds then a `needs-help` label, only Qodo's and the user's comments count, the user enables the timer. To go into the backlog and be refined like any ticket.
+  - **Next:** refine the runner doc with the skill, then mark it ready, build it, install the timer, and let it build "Delete expired session rows". The Day 4 note needs: trigger and source link, ticket and PR, checks, Qodo review, retries, where the user stepped in.
 
 - **Purpose:** a learning project, for exploring technology the user hasn't worked with before: phone apps, GitOps, OpenTelemetry, and more. Build things the real way, and explain new technology as it's introduced.
 
@@ -65,7 +73,8 @@ Last updated 2026-11-18. This is a handoff note between working sessions. The sy
   - 2026-11-13: #2 (husky), #3 (CI, Conventional Commits, release-please), #1 (rate limiting), #4 (release-please's release PR), #5 (AGENTS.md), #6 (the PR title check uses the base branch's commitlint rules, which covers the Qodo finding on #3 that was left open).
   - 2026-11-16: #7 (the backlog as the ticket system, `scripts/ticket.sh`, the `next-ticket` skill), after Qodo reviewed every push and each finding was fixed.
   - 2026-11-17: #8 (the `grilling` skill and the `refine-ticket` design), with both Qodo findings fixed. #9 (ticket 003 marked `ready`, and this file restructured to one fact per line).
-- **Open PRs:** #10, ticket 003 (the `refine-ticket` skill).
+  - 2026-11-18: #10 (ticket 003, the `refine-ticket` skill).
+- **Open PRs:** the ready PR for ticket 004 (branch `ready-004`).
 - **Release process:** works end to end.
   - Merging #1 made the App open #4, which bumped the server to 0.2.0 (`package.json`, the lockfile, the manifest, and `server/CHANGELOG.md`) and left the app at 0.1.0. CI ran on it.
   - Merging #4 created the tag `server-v0.2.0` and the GitHub Release "server: v0.2.0".
