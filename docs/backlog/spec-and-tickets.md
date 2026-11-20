@@ -116,7 +116,7 @@ Failure modes: a ticket PR that forgets the spec update leaves the spec stale. A
 
 ## Acceptance checks
 
-Checks 1 to 4 are run by the builder, in this PR, with their commands and output in "Delivery and review".
+Checks 1 to 6 are run by the builder, in this PR, with their commands and output in "Delivery and review".
 
 1. **Numbers and blockers:** in a scratch clone with a local bare `origin`:
    - with `docs/tickets/007-x.md` on `main` and nothing higher anywhere else, refine-ticket step 9.1's command prints `008`, and step 9.5's check prints `taken on main` for `007`
