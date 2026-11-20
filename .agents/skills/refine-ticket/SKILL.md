@@ -7,7 +7,7 @@ description: Get an item in this repo's backlog (docs/backlog/README.md) ready t
 
 The backlog is `docs/backlog/README.md`. This skill takes one `idea` or `designed` item and works on its design doc until it meets the backlog's **Definition of Ready**, then asks the user to approve it. Only with the user's yes, in this conversation, does it mark the item `ready`, in a PR the user merges.
 
-The design behind this skill, and the reasons for each step, are in `docs/features/003-refine-ticket-skill.md`.
+The design behind this skill, and the reasons for each step, are in `docs/features/0003-refine-ticket-skill.md`.
 
 Two rules hold throughout:
 - **Facts are yours, decisions are the user's.** Anything you can find by reading the repo, the docs, the code, or git history, or by running something, you find yourself. Never ask the user for a fact. Ask only about product and preference choices, and never guess at one that changes the scope or the behavior.
@@ -142,11 +142,11 @@ The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`)
    git fetch -q origin &&
    heads=$(git ls-remote --heads origin) &&
    max=$({
-     git show origin/main:docs/backlog/README.md | awk -F'|' -v c=2 '$c ~ /^ *[0-9][0-9][0-9] *$/ { print $c }'
-     git ls-tree -r --name-only origin/main docs/features/ | sed -nE 's#.*/([0-9]{3})-.*#\1#p'
-     printf '%s\n' "$heads" | sed -nE 's#.*refs/heads/(ready-)?([0-9]{3})(-.*)?$#\2#p'
+     git show origin/main:docs/backlog/README.md | awk -F'|' -v c=2 '$c ~ /^ *[0-9][0-9][0-9][0-9] *$/ { print $c }'
+     git ls-tree -r --name-only origin/main docs/features/ | sed -nE 's#.*/([0-9]{4})-.*#\1#p'
+     printf '%s\n' "$heads" | sed -nE 's#.*refs/heads/(ready-)?([0-9]{4})(-.*)?$#\2#p'
    } | tr -d ' ' | sort -n | tail -1) &&
-   n=$(printf '%03d' "$(expr "${max:-0}" + 1)") && echo "$n"
+   n=$(printf '%04d' "$(expr "${max:-0}" + 1)") && echo "$n"
    ```
 2. **Commit the refinement** changes not committed yet (`docs(repo): refine <title>`). Then the ready commit, next, is the only one to undo if the number turns out to be taken.
 3. **Make the ready commit,** on the refinement branch, renamed `git branch -m "ready-$n"`:
@@ -154,7 +154,7 @@ The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`)
    - in the doc, set its status line to `ready`, with the date
    - in the row: the number in the `#` column, the new link, and the status `ready`
    - fix any other links to the old path (`grep -rn "$slug.md" docs AGENTS.md .agents`)
-   - one commit, `docs(repo): mark <title> ready as ticket NNN`
+   - one commit, `docs(repo): mark <title> ready as ticket NNNN`
 4. **Reserve the number.** Push create-only, and check that `origin` has *your* commit:
 
    ```sh

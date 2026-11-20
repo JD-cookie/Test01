@@ -3,11 +3,11 @@
 #
 #   scripts/ticket.sh list
 #   scripts/ticket.sh claim next [agent-name]       # claim the first free ready ticket
-#   scripts/ticket.sh claim <NNN-slug> [agent-name]
-#   scripts/ticket.sh verify <NNN-slug>     # after exit 4: is the claim on origin ours?
+#   scripts/ticket.sh claim <NNNN-slug> [agent-name]
+#   scripts/ticket.sh verify <NNNN-slug>     # after exit 4: is the claim on origin ours?
 #
 # A ticket is a row in docs/backlog/README.md with status `ready`, a number, and a design doc
-# docs/backlog/<NNN-slug>.md. Its branch is named <NNN-slug>, so every agent knows the name in
+# docs/backlog/<NNNN-slug>.md. Its branch is named <NNNN-slug>, so every agent knows the name in
 # advance. Claiming a ticket means being the one who creates that branch on origin:
 #
 #   1. The branch must not exist on origin yet.
@@ -47,20 +47,20 @@ cd "$root"
 
 die() { code=$1; shift; echo "ticket: $*" >&2; exit "$code"; }
 
-# Prints "<NNN-slug> <status>" for each numbered row of main's backlog. Callers capture its output
+# Prints "<NNNN-slug> <status>" for each numbered row of main's backlog. Callers capture its output
 # with $(…) and check its exit code: piped straight into another command, a failed read would look
 # like an empty backlog.
 tickets() {
   text=$(git show "origin/main:$backlog") || die 2 "couldn't read $backlog on origin/main"
-  # A row whose number cell and linked doc disagree (003 linking 004-x.md) gets the status
+  # A row whose number cell and linked doc disagree (0003 linking 0004-x.md) gets the status
   # "mismatch", so it can't be claimed under either number.
   printf '%s\n' "$text" | awk -F'|' '
-    $2 ~ /^ *[0-9][0-9][0-9] *$/ {
-      if (match($3, /\]\([0-9][0-9][0-9]-[a-z0-9-]+\.md\)/)) {
+    $2 ~ /^ *[0-9][0-9][0-9][0-9] *$/ {
+      if (match($3, /\]\([0-9][0-9][0-9][0-9]-[a-z0-9-]+\.md\)/)) {
         slug = substr($3, RSTART + 2, RLENGTH - 6)
         num = $2; gsub(/ /, "", num)
         status = $5; gsub(/^ +| +$/, "", status)
-        if (substr(slug, 1, 3) != num) status = "mismatch: the # column says " num
+        if (substr(slug, 1, 4) != num) status = "mismatch: the # column says " num
         print slug, status
       }
     }'
@@ -84,7 +84,7 @@ still_ready() {
     die 5 "the claim is yours, but docs/backlog/$1.md changed on main since the claim. Don't build it: ask the user. Leave the branch; only the user releases a claim."
 }
 
-# Prints "<NNN-slug>  <state>" for each ready ticket on main, in backlog order. The state is
+# Prints "<NNNN-slug>  <state>" for each ready ticket on main, in backlog order. The state is
 # "ready" (free to claim), "claimed (…)", or "not claimable: …".
 ready_tickets() {
   git fetch -q origin main || die 4 "couldn't reach origin"
@@ -184,9 +184,9 @@ claim() {
   # Whole-value checks (grep -x would accept a multi-line value if any one line matched), because
   # both values end up in the backlog table.
   case $ticket in
-    [0-9][0-9][0-9]-*[!a-z0-9-]* | [0-9][0-9][0-9]-) die 2 "not a ticket name: $ticket (expected NNN-slug)" ;;
-    [0-9][0-9][0-9]-*) ;;
-    *) die 2 "not a ticket name: $ticket (expected NNN-slug)" ;;
+    [0-9][0-9][0-9][0-9]-*[!a-z0-9-]* | [0-9][0-9][0-9][0-9]-) die 2 "not a ticket name: $ticket (expected NNNN-slug)" ;;
+    [0-9][0-9][0-9][0-9]-*) ;;
+    *) die 2 "not a ticket name: $ticket (expected NNNN-slug)" ;;
   esac
   ready_to_claim "$agent"
 
@@ -280,13 +280,13 @@ verify() {
 case "${1:-}" in
   list) list ;;
   claim)
-    [ $# -ge 2 ] || die 2 "usage: scripts/ticket.sh claim next|<NNN-slug> [agent-name]"
+    [ $# -ge 2 ] || die 2 "usage: scripts/ticket.sh claim next|<NNNN-slug> [agent-name]"
     agent=${3:-${TICKET_AGENT:-$(id -un)}}
     if [ "$2" = next ]; then claim_next "$agent"; else claim "$2" "$agent"; fi
     ;;
   verify)
-    [ $# -ge 2 ] || die 2 "usage: scripts/ticket.sh verify <NNN-slug>"
+    [ $# -ge 2 ] || die 2 "usage: scripts/ticket.sh verify <NNNN-slug>"
     verify "$2"
     ;;
-  *) die 2 "usage: scripts/ticket.sh list | claim next|<NNN-slug> [agent-name] | verify <NNN-slug>" ;;
+  *) die 2 "usage: scripts/ticket.sh list | claim next|<NNNN-slug> [agent-name] | verify <NNNN-slug>" ;;
 esac

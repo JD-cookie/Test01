@@ -35,11 +35,11 @@ These documents are the **specification** of Test01. Together they hold enough d
 
 | # | Feature | Status |
 |---|---|---|
-| 001 | [Accounts: sign up, log in, stay logged in, log out](features/001-accounts.md) | Implemented |
-| 002 | [Rate limiting of login and signup](features/002-rate-limiting.md) | Implemented |
-| 003 | [A skill that gets a ticket ready to build](features/003-refine-ticket-skill.md) | Implemented |
+| 0001 | [Accounts: sign up, log in, stay logged in, log out](features/0001-accounts.md) | Implemented |
+| 0002 | [Rate limiting of login and signup](features/0002-rate-limiting.md) | Implemented |
+| 0003 | [A skill that gets a ticket ready to build](features/0003-refine-ticket-skill.md) | Implemented |
 
-Work that isn't built yet, with any design docs written for it, is tracked in [backlog/README.md](backlog/README.md), which works as the ticket system. An item gets its number when it's marked `ready`, so its branch name `NNN-<slug>` is known in advance. Its design doc moves from `backlog/` into `features/` in the PR that builds it.
+Work that isn't built yet, with any design docs written for it, is tracked in [backlog/README.md](backlog/README.md), which works as the ticket system. An item gets its number when it's marked `ready`, so its branch name `NNNN-<slug>` is known in advance. Its design doc moves from `backlog/` into `features/` in the PR that builds it.
 
 ## Writing a feature doc
 
