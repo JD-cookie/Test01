@@ -84,7 +84,7 @@ refine-ticket step 3 searches the code, `docs/features/`, and `docs/tickets/`.
 
 Ticket 004 is `ready` now, and could be built before this one, or be in an open PR when this one merges. The plan builds this first (004 is kept for Day 4's run, after the runner's three parts), but either way the ticket's doc would be in `docs/features/`. It's converted (Q7), by whichever PR merges second:
 - **Reached `main` first:** this ticket's PR converts it.
-- **Still open when this one merges:** its builder converts it before it merges. `next-ticket` step 4 has every ticket branch merge `main` when it moves on, which brings in the new steps, and its reviewers check rule 3. This ticket's PR body lists any ticket PRs open when it's opened (`gh pr list --search "head:"` for `NNN-*` branches; none on 2026-11-19).
+- **Still open when this one merges:** its builder converts it before it merges. `next-ticket` step 4 has every ticket branch merge `main` when it moves on, which brings in the new steps, and its reviewers check rule 3. This ticket's PR body lists any ticket PRs open when it's opened (`gh pr list --state open --json number,headRefName --jq '.[] | select(.headRefName | test("^[0-9]{3}-"))'`; none on 2026-11-19).
 
 Converting it means the build steps above, starting from `docs/features/NNN-<slug>.md` instead of `docs/backlog/`, with one of three cases for its spec:
 - **It changed existing capabilities** (004: accounts and operations): its spec content goes into those spec docs, its doc moves to `docs/tickets/`, and its file in `docs/features/` stays as a `merged into` stub, since spec docs are never deleted.
@@ -146,7 +146,7 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5).
   - Both (blocking): 003's history links `../backlog/004-delete-expired-sessions.md#readiness-review`, which breaks when 004 is built, and frozen docs can't be fixed. Fixed: the stable-link rule (spec docs by file, other ticket docs, permalinks for the rest), applied when a ticket doc moves (step 2).
   - Both (blocking): refine-ticket step 9.1's "Blocked by" check needs the item in the Features table, which this ticket and any ticket changing an existing capability never join. Fixed: built means listed in `docs/tickets/README.md` (or, for 001 and 002, the Features table); check 1 tests it.
   - Both (blocking): 003's spec would still describe the old number sources and search (`003-refine-ticket-skill.md:37`, `:84`). Fixed: the 003 updates are listed, and check 4 tests them.
-  - Both (blocking): 004 is `ready` and could be built first, leaving a second accounts doc. Fixed as far as the doc goes: "If a ticket is built under the old layout first"; the stub is Q7.
+  - Both (blocking): 004 is `ready` and could be built first, leaving a second accounts doc. Fixed as far as the doc goes: "Tickets built under the old layout"; the stub is Q7.
   - Both (blocking): rule 3 exempts docs-only PRs, the likeliest to rename a spec doc or edit a frozen one. Fixed: the new invariants hold for every PR; only the spec-update requirement keeps the exemption.
   - Codex (minor): the Changes line's `../tickets/` path is wrong from `docs/README.md` and `docs/devops.md`. Fixed: the path per location.
   - opencode (blocking): this ticket's Spec docs changed line left out 001 and 002, which it edits. Fixed: all four spec docs, each with a Changes line; check 4.
