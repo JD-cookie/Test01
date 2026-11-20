@@ -1,6 +1,6 @@
 # A runner that builds a ready ticket into a PR
 
-Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNNN-agent-build.md`. It moves to `docs/features/` in the PR that builds it.
+Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNNN-agent-runner.md`. In the PR that builds it, it moves to `docs/tickets/`, and the runner's spec goes to `docs/features/NNNN-agent-runner.md`, with the same number (ticket 0006's layout). Parts 2 and 3 edit that spec doc in place. The slug names the capability, not this first part, since a spec doc is never renamed (renamed from `agent-build` on 2026-11-20, at the user's choice).
 
 This is part 1 of 3, split on 2026-11-19 from "An agent that builds ready tickets on a timer", which was too big for one PR (Definition of Ready, item 4):
 1. **This one:** the runner, run by hand, claims a `ready` ticket, builds it, gets the checks green, and opens the PR as the App.
@@ -203,7 +203,8 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/
 - `.github/workflows/ci.yml`: a third job, `scripts`, on `ubuntu-24.04`, following rule 5 like the other two: checkout, `setup-node` with Node 24 and the npm cache, `npm ci` at the root (the tests run the real commitlint, a root dev dependency, as `pr-title.yml` installs it), then `npm run test:scripts`. CI doesn't run the root `check` today: its jobs run the server's and the app's.
 - `.husky/pre-commit`: `scripts` becomes a third part beside `server` and `app`. When `scripts/` has staged changes, it needs the root `node_modules` (or says to run `npm install` at the root, as it does for the others), links it into the snapshot, and runs `npm run test:scripts` there, on the staged content.
 - `.gitignore`: `.agent/`, and `*.pem`, which the user added in their checkout on 2026-11-19, so no App key in a working tree is committed.
-- `docs/devops.md`: a section on the runner: what it does, checking the setup, running it, following a run, and what `needs-help` means.
+- `docs/features/NNNN-agent-runner.md` (new): the runner's spec, from this doc's spec sections as built (ticket 0006's build step 3), with a Features row in `docs/README.md` and a Changes section. Parts 2 and 3 edit it in place.
+- `docs/devops.md`: a short section on operating the runner: what it does, checking the setup, running it, following a run, and what `needs-help` means, linking the spec doc for the rest.
 - `AGENTS.md`: a line in the table for the runner.
 
 ## Acceptance checks
@@ -240,7 +241,7 @@ Checks 1 to 6 are in `scripts/test/agent-run.test.sh`. It runs the runner agains
    - with a real `bwrap`, when the machine has one (skipped in CI if it doesn't), a check stub that tries to read a file under a fake secret folder fails to read it, and one that connects to a listener the test started on `127.0.0.1`, which it reached from outside first, fails. `agent-run.sh check`'s two sandbox checks pass with the real `bwrap`, and fail with a `bwrap` stub that runs its command directly, so it hides no file and has the host's network
 7. **The real setup:** on the user's machine, after tasks 1 and 2, `scripts/agent-run.sh check` passes every check, including making a token, and nothing changes on GitHub. The builder records its output, without the token, in "Delivery and review".
 8. `npm run check` passes locally and in CI, and `docs/devops.md` has the runner's section.
-9. **The real run by hand** (after this PR merges, with the user; Q9): with tasks 1 to 5 done, and a small ticket `ready` above 0004 in the backlog, `scripts/agent-run.sh` on `main` claims that ticket, and not 0004, builds it with the real `claude`, gets the checks green, and opens a PR as `jd-cookie-agent[bot]`, or stops with a draft PR and `needs-help`. Shown by the PR and the runner's log. Qodo reviews the PR, which shows task 3 works, and the user takes it through review and merges, since rounds are part 2's. It happens after this PR merges, so what happened goes in a follow-up docs PR to this feature's "Delivery and review", as ticket 0003's last checks did in PR #12: who opened the PR, the tries and checks, Qodo's findings, and where the user had to step in.
+9. **The real run by hand** (after this PR merges, with the user; Q9): with tasks 1 to 5 done, and a small ticket `ready` above 0004 in the backlog, `scripts/agent-run.sh` on `main` claims that ticket, and not 0004, builds it with the real `claude`, gets the checks green, and opens a PR as `jd-cookie-agent[bot]`, or stops with a draft PR and `needs-help`. Shown by the PR and the runner's log. Qodo reviews the PR, which shows task 3 works, and the user takes it through review and merges, since rounds are part 2's. It happens after this PR merges, when this ticket's doc is frozen (ticket 0006), so what happened goes in the "Delivery and review" of the ticket the run built, in that ticket's PR before it merges, with a link back to this ticket's doc: who opened the PR, the tries and checks, Qodo's findings, and where the user had to step in.
 
 ## Readiness review
 
@@ -366,6 +367,11 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5), as the whole of "An agent t
 - **Review round 5 (this part):** Codex (gpt-6.1-sol) only, at the user's choice, asked for findings that would make a build wrong or need a question. The restatement matches. 2 findings, both kept and fixed in the doc.
   - Codex: a run's setup check opens a TCP listener, so every runner test, not just the listener cases, would fail inside the sandbox. Probed: inside `bwrap --unshare-net`, `/proc/net/dev` lists only `lo`, also nested, while `/sys/class/net` shows the host's interfaces. Fixed: the setup's network check reads `/proc/net/dev`, and only check 6's listener case needs a listener.
   - Codex: `claim next` takes the first ready ticket in the table's order, so check 9 would claim 0004. Fixed: task 5 puts the second ticket's row above 0004's, and checks `ticket.sh list` first.
+- **After ticket 0006 was marked ready** (2026-11-20, the user's review request): the three parts were checked against 0006's layout (a living spec in `docs/features/`, frozen ticket docs in `docs/tickets/`), and changed to fit it:
+  - this part is blocked by 0006, so it's built under the new layout
+  - its spec becomes `docs/features/NNNN-agent-runner.md`, which parts 2 and 3 edit in place, with a short operating section in `docs/devops.md` (the user's choice, over `docs/devops.md` only)
+  - renamed from `agent-build` to `agent-runner`, since a spec doc is never renamed and this one covers all three parts (the user's choice)
+  - each real run is recorded in the doc of the ticket it built, in that ticket's PR, since this ticket's doc is frozen once its PR merges: this replaces round 2's "follow-up docs PR" fix
 
 ## Decisions made for this ticket
 
