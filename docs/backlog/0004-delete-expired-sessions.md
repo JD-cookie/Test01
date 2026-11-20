@@ -1,10 +1,10 @@
 # Delete expired session rows
 
-Status: **ready**, 2026-11-18, as ticket 004. It moves to `docs/features/` in the PR that builds it.
+Status: **ready**, 2026-11-18, as ticket 0004. It moves to `docs/features/` in the PR that builds it.
 
 ## Summary
 
-Sessions expire 30 days after login (see [001](../features/001-accounts.md#data-model)), and an expired token is already rejected with `401`. But its row stays in `sessions` forever. This feature deletes expired rows on a schedule, so the table only holds sessions that can still be used. It's housekeeping: nothing changes for users or for the API.
+Sessions expire 30 days after login (see [0001](../features/0001-accounts.md#data-model)), and an expired token is already rejected with `401`. But its row stays in `sessions` forever. This feature deletes expired rows on a schedule, so the table only holds sessions that can still be used. It's housekeeping: nothing changes for users or for the API.
 
 It's for whoever runs the server: today every login adds a row, and only a logout deletes one, so expired rows are never removed. A lookup by token never needs them. What doesn't change: how long a session lasts, how tokens are checked, logout, and every response the API gives.
 
@@ -26,7 +26,7 @@ None. Expired sessions already behave as logged out.
 
 ## API
 
-No changes. Rejecting an expired token doesn't depend on the sweep: a session with `expires_at` in the past gets `401 UNAUTHENTICATED` ("Your session has expired. Please log in again.", see [001](../features/001-accounts.md)) whether or not its row has been deleted yet.
+No changes. Rejecting an expired token doesn't depend on the sweep: a session with `expires_at` in the past gets `401 UNAUTHENTICATED` ("Your session has expired. Please log in again.", see [0001](../features/0001-accounts.md)) whether or not its row has been deleted yet.
 
 ## Processing
 
@@ -70,7 +70,7 @@ This only covers SQLite. The server still supports one instance per database ([d
 - If the database is busy or fails, the sweep logs `error` and the server keeps serving. Expired rows wait for the next sweep, and expired tokens are still rejected meanwhile.
 - No new settings. The interval (1 hour) is a constant. Tests call the sweep function directly instead of waiting for the timer.
 - Known gaps: two processes creating a brand-new database file at the same moment can still fail, at the WAL pragma (see "Data model"); only one server runs per database for now. The sweep can't delete a row whose session is still valid: it only deletes rows with `expires_at <= now`, the opposite of the test `requireUser` in `server/src/app.ts` uses to accept one (`expires_at > now`), which `GET /api/v1/me` runs.
-- In 001's Security section, delete the "Deleting expired session rows" line from the known gaps.
+- In 0001's Security section, delete the "Deleting expired session rows" line from the known gaps.
 
 ## Tasks for the user
 
@@ -100,7 +100,7 @@ Checks 1 to 8 are `node:test` tests in `server/test/sessions.test.ts`, through `
 7. **A failed sweep doesn't stop the server:** `runSweep(db, log)`, the function the startup sweep and the timer both call, is given a database whose `prepare` throws. It logs one `error` with the message `sessions: sweep failed`, and returns without throwing. With a database that has one expired row, it logs one `info`, `sessions: deleted 1 expired`; with nothing expired, it makes no log call at all. An uncaught error in a `setInterval` callback would end the process, so the catch is what keeps the server up. With the real database again, the next call deletes the expired rows. A unit test with a stub `db` and a stub `log` that records its calls.
 8. **Upgrade:** opening a file database at version 1 (made by applying only `MIGRATIONS[0]` and setting `PRAGMA user_version = 1`) applies migration 2: `PRAGMA user_version` becomes 2, and `sqlite_master` lists the index `sessions_expires_at`. `PRAGMA busy_timeout` on the returned connection reads `{ timeout: 0 }`. After closing it, opening the same file again, now at version 2 so no migration runs, also returns a connection whose busy timeout reads `{ timeout: 0 }`.
 9. **Two processes migrating at once:** on a file database at version 1, created in WAL mode as every database `openDb` makes is, the test takes the write lock with `BEGIN IMMEDIATE` on its own connection, and starts two child processes. Each child writes `start` to stdout with `fs.writeSync`, a synchronous write, right before it calls `openDb` on the file. The test commits 200 ms after it has read `start` from both, and fails if they haven't both written it within 10 seconds. Both children exit with code 0, and the database is at version 2 with the index. Run against today's runner, both children fail with `database is locked` (see the probe under "Data model"), so this check can fail. It's in `server/test/sessions.test.ts` too, and passes the same way.
-10. `npm run check` passes locally and in CI. The 001 doc no longer lists this as a gap, and `docs/devops.md`'s migrations section describes the lock, the recheck, and the busy timeout.
+10. `npm run check` passes locally and in CI. The 0001 doc no longer lists this as a gap, and `docs/devops.md`'s migrations section describes the lock, the recheck, and the busy timeout.
 
 ## Readiness review
 
@@ -116,7 +116,7 @@ Refined 2026-11-18 by Claude Code (claude-opus-5-5).
   5. pass: the SQL, the log messages, the files, and the docs it changes
   6. pass: "Tasks for the user: none"
   7. pass: each check says where it's tested and what shows it passed; checks 6 and 9 were rewritten so they can fail
-  8. pass: rule 2 (each instance sweeps, idempotently; the migration lock) and rule 3 (001 and devops.md); rules 1, 4, and 5 don't apply
+  8. pass: rule 2 (each instance sweeps, idempotently; the migration lock) and rule 3 (0001 and devops.md); rules 1, 4, and 5 don't apply
   9. pass: no trigger but the timer, a failed sweep is logged and retried, no new gaps
   10. pass: no open questions; the decisions are below
 - **Questions and answers:** Q1 keep the migration runner's fix in this ticket → yes. Q2 sweep at startup and hourly, with a fixed interval → yes. Q3 no grace period → yes. Q4 the sweep in a new `server/src/sessions.ts` → yes.

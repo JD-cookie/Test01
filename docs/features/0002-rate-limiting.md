@@ -1,4 +1,4 @@
-# Feature 002: Rate limiting of login and signup
+# Feature 0002: Rate limiting of login and signup
 
 Status: implemented. Added 2026-11-12.
 
@@ -48,13 +48,13 @@ Retry-After: 900
 
 ### Processing order: `POST /api/v1/auth/login`
 
-These steps come before the steps in [001](001-accounts.md#post-apiv1authlogin):
+These steps come before the steps in [0001](0001-accounts.md#post-apiv1authlogin):
 
 1. Count the request against **login requests per client**. If the count is now over the limit, return `429`.
-2. Normalize the email as 001 does. Count the attempt against **failed logins per client and email**. If the count is now over 5, return `429` without checking the password. This holds **even if the password is right**. Otherwise, after a block, a correct guess would get a different response from a wrong one, and guessing could carry on at full speed.
-3. Check the email and password as 001 does.
+2. Normalize the email as 0001 does. Count the attempt against **failed logins per client and email**. If the count is now over 5, return `429` without checking the password. This holds **even if the password is right**. Otherwise, after a block, a correct guess would get a different response from a wrong one, and guessing could carry on at full speed.
+3. Check the email and password as 0001 does.
    - On failure, leave the count as it is and return `401 INVALID_CREDENTIALS`. The 5th failure still returns `401`. The 6th attempt gets `429`.
-   - On success, clear that client and email's count, then continue as 001 does.
+   - On success, clear that client and email's count, then continue as 0001 does.
 
 The attempt is counted **before** the password check, and counting is atomic. Checking the password takes tens of milliseconds, by design. If attempts were counted only after it, a burst of parallel guesses could all get past the check before any of them had been counted. Counting first means at most 5 password checks per window, however many requests arrive at once. A success clears only the count. Parallel failures can't put a count back afterwards, because they were counted before their checks began.
 
@@ -62,7 +62,7 @@ Unknown emails are counted like known ones, so the responses still don't reveal 
 
 ### Processing order: `POST /api/v1/auth/signup`
 
-Before step 1 of [001](001-accounts.md#post-apiv1authsignup): count the request against **signup requests per client**. If the count is now over the limit, return `429`.
+Before step 1 of [0001](0001-accounts.md#post-apiv1authsignup): count the request against **signup requests per client**. If the count is now over the limit, return `429`.
 
 ### Other endpoints
 
