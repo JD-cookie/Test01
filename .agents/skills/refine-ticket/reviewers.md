@@ -22,3 +22,5 @@ One row per reviewer per round. **Kept** findings were fixed in the doc or turne
 | 2026-11-18 | Delete expired session rows | 3 | opencode | ollama-cloud/glm-5.3 | 3 | 0 | 0 |
 | 2026-11-18 | Delete expired session rows | 4 | Codex | gpt-6.1-sol | 3 | 0 | 0 |
 | 2026-11-18 | Delete expired session rows | 4 | opencode | ollama-cloud/glm-5.3 | 3 | 0 | 0 |
+| 2026-11-19 | Keep the spec separate from the ticket history | 1 | Codex | gpt-6.1-sol | 7 | 0 | 0 |
+| 2026-11-19 | Keep the spec separate from the ticket history | 1 | opencode | ollama-cloud/kimi-k3.1-pro | 9 | 0 | 0 |
