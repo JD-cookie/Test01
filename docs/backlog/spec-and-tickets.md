@@ -127,7 +127,7 @@ Checks 1 to 6 are run by the builder, in this PR, with their commands and output
 5. **An old-layout ticket, if there is one:** if this PR converts a ticket (see "Tickets built under the old layout"), the builder records which case it was, with these commands and their output in "Delivery and review":
    - `git diff --stat origin/main...HEAD` lists the ticket doc's new path in `docs/tickets/`, and each spec doc that got content
    - every acceptance check of the converted ticket appears, as a check, in a spec doc: for each, `grep -n` finds its scenario in a spec doc's "Acceptance checks"
-   - existing capabilities only: the old file in `docs/features/` has just a title, `Status: merged into <spec doc>`, and Changes (`grep -c '^## '` prints 1), and `grep -c "NNN-" docs/README.md`'s Features table has no row for it; a new capability: its file still has its spec sections and no history sections, and its Features row is there
+   - existing capabilities only: the old file in `docs/features/` has just a title, `Status: merged into <spec doc>`, and Changes (`grep -c '^## '` prints 1), and `grep -n "](features/NNN-" docs/README.md` prints nothing (no Features row); a new capability: its file still has its spec sections and no history sections, and its Features row is there
    - the Changes lines and index row, as in check 4
 
    If there's none (the plan), this check is "not applicable", and the conversion item stays untested until it's used: a known gap.
