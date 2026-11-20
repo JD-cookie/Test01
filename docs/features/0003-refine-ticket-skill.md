@@ -1,6 +1,6 @@
 # A skill that gets a ticket ready to build
 
-Status: implemented, ticket 003. Every acceptance check passed (see "Delivery and review"). The skill is [`.agents/skills/refine-ticket/SKILL.md`](../../.agents/skills/refine-ticket/SKILL.md), and its reviewer prompt is [`review-prompt.md`](../../.agents/skills/refine-ticket/review-prompt.md) beside it.
+Status: implemented, ticket 0003. Every acceptance check passed when it was built (see "Delivery and review"). Check 2's review items changed on 2026-11-19, and are pending until a refinement runs them. The skill is [`.agents/skills/refine-ticket/SKILL.md`](../../.agents/skills/refine-ticket/SKILL.md), and its reviewer prompt is [`review-prompt.md`](../../.agents/skills/refine-ticket/review-prompt.md) beside it.
 
 ## Summary
 
@@ -50,8 +50,8 @@ The user asks an agent to refine an item, for example "refine the delete-expired
    The skill shows the proposed parts as a numbered list, each with a title, what it delivers, and what blocks it. It asks the user whether the size is right and the blocking is correct, and changes it until the user agrees. Then each part becomes its own backlog item, with "Blocked by: …" at the start of its Notes, and the skill refines each one separately.
 6. **Settles what's open.** It finds the facts itself: it reads the code, or runs a quick probe or prototype when only running something can tell. It then interviews the user about the remaining decisions with the `grilling` skill, in rounds, and waits for the answers. It writes each answer into the doc: in the section it belongs to, and in "Decisions made for this ticket" if it was a choice. It never guesses at anything that changes the scope or the behavior.
 7. **Gets an independent review.** Each reviewer is a fresh agent that gets the doc and the repo, with none of this conversation's context.
-   - **Round 1 has two reviewers,** run separately so neither sees the other's report. Where they're available, they're the two agents that didn't refine the doc: for a doc refined by Claude Code, Codex and opencode. With only one other agent, the second reviewer is a fresh session of the refining agent's own model. Two reviewers find more than one, and the round shows which one is more useful for this ticket, rather than the skill picking one up front.
-   - **Later rounds have one reviewer:** a fresh session of the round-1 reviewer whose findings were the most useful, meaning the most findings kept (fixed in the doc, or turned into a question for the user) rather than answered or dropped. It also gets the previous rounds' findings and what was done about each, so it can check the fixes as well as look for new gaps. If the two were about even, the skill asks the user which to keep.
+   - **Every round has two reviewers,** run separately so neither sees the other's report, as fresh sessions each round. Where they're available, they're the two agents that didn't refine the doc: for a doc refined by Claude Code, Codex and opencode. With only one other agent, the second reviewer is a fresh session of the refining agent's own model. Two reviewers find different problems, in later rounds as well as the first.
+   - **Later rounds** also get the previous rounds' findings and what was done about each, so the reviewers check the fixes as well as look for new gaps. They report only **blocking** findings: ones that would make a build that follows the doc come out wrong, or that a builder would have to ask about or guess. Other findings, such as wording, are **minor**. Every finding says which it is, and the refining agent decides when it checks the finding.
 
    Each reviewer:
    - first restates the goal in its own words. If its restatement differs from the skill's in step 2, that difference is a finding: the doc can be read two ways.
@@ -70,19 +70,19 @@ The user asks an agent to refine an item, for example "refine the delete-expired
 
    After each round, the skill checks that `git status --porcelain --ignored` in the clone and in the checkout, and the branches on `origin`, are as before. If anything changed, it stops and tells the user. Those checks only confirm the read-only modes: they can't see changes outside the repo.
 
-   Each finding is fixed in the doc, or answered with the reason it stays, just like a PR finding. Fixes that need a decision go back to the user through step 6. After the fixes, the next round runs. After three rounds with findings still coming, the skill stops and asks the user.
-8. **Asks the user for approval.** When the doc passes the checklist and the review has nothing left, the skill shows the user:
+   Each finding is fixed in the doc, or answered with the reason it stays, just like a PR finding. Fixes that need a decision go back to the user through step 6. After the fixes, the next round runs. The review stops after a round with no kept blocking findings; its minor ones are fixed without another round. After five rounds with kept blocking findings still coming, the skill stops and asks the user.
+8. **Asks the user for approval.** When the doc passes the checklist and the last review round had no kept blocking findings, the skill shows the user:
    - the goal, restated
    - the checklist results
    - what changed in the doc, and the questions and answers
    - the review findings, and what was done about each
 
    Then it asks: "Mark it ready?"
-9. **Marks it ready, only if the user says yes**, on a branch and in a PR. That PR gives the ticket the next free number, renames the doc to `NNN-<slug>.md`, and sets the row's number, link, and status. The user merges the PR, so the ticket becomes `ready` on `main` only through the user.
+9. **Marks it ready, only if the user says yes**, on a branch and in a PR. That PR gives the ticket the next free number, renames the doc to `NNNN-<slug>.md`, and sets the row's number, link, and status. The user merges the PR, so the ticket becomes `ready` on `main` only through the user.
 
-   **Reserving the number.** A number is only unique on `main`, so two refinements in parallel could both pick the same one for their PRs. The number is reserved the same way a ticket is claimed: by creating a branch named after it on `origin`, here `ready-NNN`, which is also the PR's branch.
-   1. Take one more than the highest number used in `main`'s backlog table, in `docs/features/`, and in the names of all `NNN-*` and `ready-NNN` branches on `origin`.
-   2. Push the branch create-only (`--force-with-lease=refs/heads/ready-NNN:`), and check that `origin` has this commit, as `scripts/ticket.sh claim` does.
+   **Reserving the number.** A number is only unique on `main`, so two refinements in parallel could both pick the same one for their PRs. The number is reserved the same way a ticket is claimed: by creating a branch named after it on `origin`, here `ready-NNNN`, which is also the PR's branch.
+   1. Take one more than the highest number used, as four digits, zero-padded, in `main`'s backlog table, in `docs/features/`, and in the names of all `NNNN-*` and `ready-NNNN` branches on `origin`.
+   2. Push the branch create-only (`--force-with-lease=refs/heads/ready-NNNN:`), and check that `origin` has this commit, as `scripts/ticket.sh claim` does.
    3. If another refinement got there first, take the next number and try again.
    4. Before step 1, check on a fresh `main` that the item still has no number, and that each item named in its "Blocked by: …" notes is built: gone from the backlog, and in the Features table. A blocked item isn't marked ready. Step 8 also says so, before asking the user.
    5. After the push, check that `$n` isn't on `main` now. A ready PR's branch is deleted when it merges, so another PR for the same number could have merged after step 1, and then the push still succeeds. If it's taken, the skill deletes its own reservation and starts over. After the reservation exists, `$n` can only reach `main` through this PR.
@@ -104,7 +104,7 @@ The skill records its work in a new section of the design doc, **Readiness revie
 - the date, the goal as restated, and the results of the checks that the work is needed
 - the checklist results
 - the questions asked, and the user's answers
-- each review round: who reviewed (agent and model), and after round 1, which reviewer was kept for later rounds and why; each reviewer's restatement of the goal, each finding with its evidence, what was done about it, and how many findings were dropped for lack of evidence
+- each review round: who reviewed (agent and model); each reviewer's restatement of the goal, each finding with whether it's blocking or minor, its evidence, what was done about it, and how many findings were dropped for lack of evidence
 - the user's approval
 
 That way, a ticket's history shows why it was considered ready. Item 9 of "Writing a feature doc" in `docs/README.md` describes the section.
@@ -153,7 +153,7 @@ One idea is deliberately not taken: Matt Pocock's specs and briefs leave out fil
   - the updated "Who sets it" text
   - a "Refining it" step in "How it works", between designing an item and marking it ready
   - the "Blocked by: …" convention for the Notes column
-  - in "Marking it ready", the `ready-NNN` branch that reserves the number
+  - in "Marking it ready", the `ready-NNNN` branch that reserves the number
 - `docs/README.md`: item 9 of "Writing a feature doc", **Readiness review**.
 - `AGENTS.md`: the `refine-ticket` skill in "Backlog tickets", the updated rule about who marks tickets `ready`, and the Definition of Ready as context for reviewers.
 - `.agents/skills/next-ticket/SKILL.md`: "don't mark anything `ready` yourself" now points to `refine-ticket`.
@@ -167,16 +167,16 @@ Each check is run by hand, with the transcript or the PR as the evidence, becaus
    - opens with the goal restated, and the results of the three "is it needed" checks, including where it looked
    - produces checklist results for all 10 items
    - asks only about decisions, never about facts it could have looked up, in numbered rounds with a recommended answer for each, and writes the answers into the doc
-   - runs round 1 of the review with two fresh reviewers that don't see each other's reports, and any later round with only the reviewer whose findings were the most useful
-   - records each round in a "Readiness review" section: who reviewed, each reviewer's restatement, each finding with its evidence, what was done about it, and which reviewer was kept and why
+   - runs every review round with two fresh reviewers that don't see each other's reports, and stops after the first round with no kept blocking findings
+   - records each round in a "Readiness review" section: who reviewed, each reviewer's restatement, each finding with whether it's blocking or minor, its evidence, and what was done about it
    - then asks the user to approve
 3. If the user says no, the item stays `designed`, and the doc and the row on `main` don't change status.
 4. If the user says yes, the skill opens a PR that gives the item the next free number, renames the doc, and sets the row to `ready`. After the user merges it, `scripts/ticket.sh list` shows the ticket as `ready`.
 5. Run on an `idea` row with no design doc, the skill first writes a draft doc with the feature doc sections, then refines it.
 6. Run on an item that is too big, for example a made-up "OpenTelemetry for the server and the app" with no design, the skill proposes vertical slices, each with what it delivers and what blocks it. With the user's agreement, it adds them to the backlog, each with "Blocked by: …" in its Notes.
-7. Two refinements approved at the same time get different numbers: the second one's create-only push of `ready-NNN` fails, and it takes the next number. Tested with two clones and a local bare `origin`, as the claim script was.
-8. Run on a made-up item for something that already exists, for example "Let users log out", the skill reports that it's already built, with where (feature 001), and asks before going on.
-9. Probes run only in a scratch directory or a throwaway clone. After a refinement, `git status` in the checkout shows only the doc changes, and `origin` has no new branches other than `ready-NNN`.
+7. Two refinements approved at the same time get different numbers: the second one's create-only push of `ready-NNNN` fails, and it takes the next number. Tested with two clones and a local bare `origin`, as the claim script was.
+8. Run on a made-up item for something that already exists, for example "Let users log out", the skill reports that it's already built, with where (feature 0001), and asks before going on.
+9. Probes run only in a scratch directory or a throwaway clone. After a refinement, `git status` in the checkout shows only the doc changes, and `origin` has no new branches other than `ready-NNNN`.
 10. The skill never sets a status to `ready` without the user's yes in the same conversation, and never merges a PR.
 11. The Definition of Ready section exists in `docs/backlog/README.md`. `AGENTS.md`, the backlog README, and `docs/README.md` describe the skill and the Readiness review section, and their wording about who marks tickets `ready` matches.
 
@@ -187,15 +187,15 @@ Change these before marking it ready if you disagree:
 - **The skill can make the `ready` edit, but only after the user's explicit yes, and only in a PR the user merges.** This keeps the user's decision and lets the agent do the bookkeeping. The rule's wording changes to say so.
 - **The interview uses the separate `grilling` skill,** copied from Matt Pocock's skills (decided 2026-11-17), because it's useful beyond refining tickets.
 - **Review findings need evidence,** and those without it are dropped. Review rounds then converge on real gaps instead of growing with speculation.
-- **At most three independent review rounds** before the user is asked. It keeps the loop from running forever on a ticket that's not converging.
-- **Two reviewers in round 1, then the more useful one** (suggested by the user, 2026-11-17). With Claude Code, Codex, and opencode set up, the two agents that didn't refine the doc can both review it, so there's no need to guess which one will do better. Later rounds mostly check the fixes, and one reviewer is enough for that.
+- **At most five independent review rounds with blocking findings** before the user is asked, and the review stops at the first round with none (changed by the user, 2026-11-19, from at most three rounds, stopping at the first round with no kept findings of any kind). It keeps the loop from running forever on a ticket that's not converging. Three was too few: the runner's design ("A runner that builds a ready ticket into a PR") had 21, 23, 13, 11, and then 2 kept findings over five rounds, and its last rounds still found problems that would have broken a build. Stopping only at zero findings of any kind would keep rounds going on wording.
+- **Two reviewers in every round** (the user, 2026-11-19). It replaced two reviewers in round 1 and then only the more useful one (suggested by the user, 2026-11-17). With Claude Code, Codex, and opencode set up, the two agents that didn't refine the doc can both review it. Later rounds turned out not to just check the fixes: in rounds 3 and 4 of the runner's design, Codex and opencode made 24 kept findings between them, and none was found by both. One reviewer would have missed about half.
 - **A different model for the independent review where possible.** It's not required: a fresh agent of the same model with no shared context is still independent.
 - **opencode's model rotates, and every reviewer's results are recorded** (decided by the user, 2026-11-18). Picking one model would fix today's choice and never try a better one. opencode's default here, `inkling-2-small`, is small. With the rotation, each candidate gets used in turn, and the table shows over several refinements which one finds the most findings that hold up. Two refinements that add rows at once both append to the end of the table, so the second PR to merge gets a merge conflict, which is easy to resolve by keeping both rows.
 - **File paths stay in the implementation map,** unlike Matt Pocock's briefs. See "Prior art".
 - **A split comes before the interview** (decided while building, 2026-11-17). The design had the interview first. For an item that's too big, that asks questions that belong to the parts, so the skill now proposes the split first and asks only the decisions the size depends on.
 - **An idea's first draft comes after the "is it needed" checks** (found in a test run, 2026-11-17). Drafting a doc for something already built is wasted work, and it would be deleted with the row.
 - **The refinement and the ready edit are two commits** (decided while building). A lost race for a number then undoes only the ready commit.
-- **The refinement branch stays local** unless the user approves: it's pushed as `ready-NNN`, or, if the user stops, as `refine-<slug>` only on a yes. That keeps acceptance check 9 true: `origin` gets no branch other than `ready-NNN` without the user's say.
+- **The refinement branch stays local** unless the user approves: it's pushed as `ready-NNNN`, or, if the user stops, as `refine-<slug>` only on a yes. That keeps acceptance check 9 true: `origin` gets no branch other than `ready-NNNN` without the user's say.
 
 ## Delivery and review
 
@@ -203,7 +203,7 @@ Built on branch `003-refine-ticket-skill`, claimed with `scripts/ticket.sh claim
 
 **Acceptance checks:**
 1. **Pass.** `claude -p`, `codex exec`, and `opencode run`, each asked in the repo which skills they have, listed `grilling`, `next-ticket`, and `refine-ticket`.
-2. **Pass,** in a real refinement of "Delete expired session rows" (2026-11-18, Claude Code, claude-opus-5-5). Its Readiness review section, in [`004-delete-expired-sessions.md`](../backlog/004-delete-expired-sessions.md#readiness-review), is the evidence:
+2. **Pass under the earlier review rules** (two reviewers in round 1, then the more useful one; ask after three rounds). **Pending** for the review items as changed on 2026-11-19 (two reviewers every round, stopping on blocking findings): no refinement has run them yet. Passed in a real refinement of "Delete expired session rows" (2026-11-18, Claude Code, claude-opus-5-5). Its Readiness review section, in [`0004-delete-expired-sessions.md`](../backlog/0004-delete-expired-sessions.md#readiness-review), is the evidence:
    - It opened with the goal restated and the three "is it needed" checks, with where it looked (`server/src/app.ts`, a search of `server/src`, open PRs, the backlog history).
    - It listed all 10 Definition of Ready items, each with a reason.
    - It asked four decisions in one numbered round, each with a recommendation. The user said yes to all four, and each answer is in the doc and in "Decisions made for this ticket". The facts, such as how SQLite behaves with two processes migrating at once, came from probes, not questions.
@@ -218,10 +218,10 @@ Built on branch `003-refine-ticket-skill`, claimed with `scripts/ticket.sh claim
 5. **Pass.** A fresh `claude -p` session ran the skill on "Password reset", an `idea` with no doc, in a throwaway clone with a local bare `origin`. It wrote `docs/backlog/password-reset.md` with the feature doc sections, linked the row, and stopped to ask about an overlap it found: "Email verification" needs the same email sending.
 6. **Pass,** up to the user's agreement. On a made-up "OpenTelemetry for the server and the app", the skill first found that it overlapped the existing "OpenTelemetry" row and asked to merge them. Told yes (`claude -p --continue`), it ran the Definition of Ready, found "Fits one PR" failed, and proposed five vertical slices (server traces; server metrics; server logs; app traces; dashboards and alerts), each with what it delivers and "Blocked by", then asked whether the size and blocking are right.
 7. **Pass.** Two clones of a local bare `origin` both computed 004 with the step 9 commands. The first push of `ready-004` succeeded, the second was rejected, and on retry the second clone got 005. A `007-*` branch on `origin` made the next number 008.
-8. **Pass.** On a made-up "Let users log out", the skill reported it's built in feature 001, citing `docs/features/001-accounts.md`, `server/src/app.ts`, `server/test/auth.test.ts`, and `app/src/session.tsx`, and asked whether to drop the row.
+8. **Pass.** On a made-up "Let users log out", the skill reported it's built in feature 001, citing `docs/features/0001-accounts.md`, `server/src/app.ts`, `server/test/auth.test.ts`, and `app/src/session.tsx`, and asked whether to drop the row.
 9. **Pass** for the three test runs: `git status` in each clone showed only doc changes, and the bare `origin` had no new branches. In check 2's real refinement too: after each of the four rounds, the review clone showed only `opencode.json`, the checkout was unchanged, and `origin`'s branches were the same. The only branch pushed was `ready-004`.
 10. **Pass.** The test runs didn't set a status to `ready` or open a PR. In check 2, the status changed only after the user's yes, in the same conversation, and the user merged PR #11.
-11. **Pass.** `docs/backlog/README.md` has the Definition of Ready, the "Refining it" step, the `ready-NNN` reservation, and the "Blocked by" convention. `AGENTS.md`, the backlog's "Who sets it" column, and `next-ticket` all say the user decides and an agent may make the edit only after the user approves, in a PR the user merges.
+11. **Pass.** `docs/backlog/README.md` has the Definition of Ready, the "Refining it" step, the `ready-NNNN` reservation, and the "Blocked by" convention. `AGENTS.md`, the backlog's "Who sets it" column, and `next-ticket` all say the user decides and an agent may make the edit only after the user approves, in a PR the user merges.
 
 **Found while building:**
 - **Codex left its read-only sandbox.** With the user's `~/.codex/config.toml` (`approval_policy = "on-request"`, `approvals_reviewer = "auto_review"`), `codex exec -s read-only` asked to escalate, its automatic approver allowed it, and it wrote files in a scratch repo. With `-c approval_policy="never"`, the write was refused. The skill's reviewer command includes it. opencode's `plan` agent and `claude -p --permission-mode plan` both refused to write.
@@ -230,8 +230,8 @@ Built on branch `003-refine-ticket-skill`, claimed with `scripts/ticket.sh claim
 - `gh pr list` fails in a clone whose `origin` is a local path, so test runs can't check open PRs. A real run in the checkout can.
 
 **Review (PR #10):**
-- Qodo, "Ready tickets can reuse old numbers": it said `git ls-tree --name-only origin/main docs/features/` doesn't list the files inside the folder. It does, with the trailing slash (it printed `docs/features/001-accounts.md` and `002-rate-limiting.md`). But the command now uses `-r`, so it doesn't depend on the slash. Tested on a scratch remote where the highest number, 005, was only in `docs/features/`: the result was 005.
-- Qodo, "Two refinements can ready one ticket": correct. The `ready-NNN` branch reserves a number, not an item, so two agents refining one item could both open ready PRs. Fixed: step 9 checks that the item is still unnumbered on a fresh `main`, and after the push, lists other `ready-*` branches that change the item's doc, stopping to ask the user if there's one. Tested on a scratch remote: with `ready-006` for the same item and `ready-007` for another, it printed only `ready-006`.
+- Qodo, "Ready tickets can reuse old numbers": it said `git ls-tree --name-only origin/main docs/features/` doesn't list the files inside the folder. It does, with the trailing slash (it printed `docs/features/0001-accounts.md` and `0002-rate-limiting.md`). But the command now uses `-r`, so it doesn't depend on the slash. Tested on a scratch remote where the highest number, 005, was only in `docs/features/`: the result was 005.
+- Qodo, "Two refinements can ready one ticket": correct. The `ready-NNNN` branch reserves a number, not an item, so two agents refining one item could both open ready PRs. Fixed: step 9 checks that the item is still unnumbered on a fresh `main`, and after the push, lists other `ready-*` branches that change the item's doc, stopping to ask the user if there's one. Tested on a scratch remote: with `ready-006` for the same item and `ready-007` for another, it printed only `ready-006`.
 - Qodo's second pass (on `c36173a`) found four more. I missed three of them at the next check, because they were only in Qodo's summary comment, not inline:
   - "New ideas can get competing ready PRs": correct. An idea has no doc on `main`, so a diff of `docs/backlog/<slug>.md` found nothing. Fixed: the check looks for a change to the item's **row**, by its title. Tested: a `ready-004` that created a new doc for the idea "Foo idea" was found.
   - "A remote error can hide a competing ticket": correct. Fixed: every command in step 9 is chained with `&&`, and a failed fetch prints `error: <branch>` and stops the check. Tested with a `git` wrapper that fails one fetch.
@@ -246,3 +246,4 @@ Built on branch `003-refine-ticket-skill`, claimed with `scripts/ticket.sh claim
   - "A merged ticket gets a second ready PR": correct, though rare: another ready PR for the item can merge between step 1 and the scan, and its deleted branch no longer shows up. Taken to the user, who chose the fix (2026-11-18): step 9.6 ends by repeating step 1's check of the row on a fresh `main`. Tested on a scratch remote: an unnumbered row passes, a numbered row prints `same item: on main`, and a missing row prints `error: no row on main`.
   - "Dropped tickets can still get ready PRs" (in Qodo's summary only, on b83d4f5): correct, though rare. The new recheck matched the title anywhere in a line, so if the item's row was dropped while another row's Notes still linked to it (as "Signed build provenance" links to "Container image for the server"), it found that row and passed. Reproduced on a scratch repo. Taken to the user, who chose the fix (2026-11-18): step 9.6 matches only the Item column, as the plain title or a link's text, both in the scan of other branches and in the recheck on `main`. Tested on a scratch repo: a dropped item that another row links to prints `error: no row on main`, an unnumbered item passes, a numbered one prints `same item: on main`, and in the scan, a removed row that only links to the item no longer counts as the item.
 - Rules, skills, or reviewer context: the follow-up check should read Qodo's summary comment as well as its inline comments. That's a working habit, saved in Claude's notes, not a repo rule.
+- **Changed after delivery (2026-11-19, the user's decision):** every review round now has two reviewers, from round 2 on they report only blocking findings, the review stops after the first round with no kept blocking findings, and the user is asked after five rounds instead of three. See "Decisions made for this ticket". The checks above were run with the earlier rules. Acceptance check 2's review items, as changed, haven't been run yet, so check 2 is marked pending for them: the next refinement shows them, and its result goes here.

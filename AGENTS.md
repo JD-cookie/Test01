@@ -67,7 +67,7 @@ Each rule says where it applies and why it exists. Reviewers should flag changes
 
 ### 3. Every Feature Ships With Its Doc
 
-**Rule:** a PR that adds or changes behavior updates the spec in the same PR: `docs/features/NNN-<slug>.md` for a feature, `docs/devops.md` for environments, config, CI, or releases. A feature's number is given when its ticket is marked `ready` in the backlog, and its branch is named after the doc (`NNN-<slug>`). The docs must hold enough detail to rebuild the system from them alone. When a feature built from the backlog is done, its row leaves `docs/backlog/README.md`.
+**Rule:** a PR that adds or changes behavior updates the spec in the same PR: `docs/features/NNNN-<slug>.md` for a feature, `docs/devops.md` for environments, config, CI, or releases. A feature's number is four digits, zero-padded (`0001`), given when its ticket is marked `ready` in the backlog, and its branch is named after the doc (`NNNN-<slug>`). The docs must hold enough detail to rebuild the system from them alone. When a feature built from the backlog is done, its row leaves `docs/backlog/README.md`.
 
 **Applies to:** every PR that touches `app/`, `server/`, or `.github/`. Docs-only, test-only, and release PRs are exempt.
 
@@ -99,11 +99,11 @@ Each rule says where it applies and why it exists. Reviewers should flag changes
 
 Work comes from [`docs/backlog/README.md`](docs/backlog/README.md), which defines the statuses and the lifecycle of a ticket. Several agents may work at once, so:
 
-- **Only build a `ready` ticket.** Such a ticket has a number and a design doc, `docs/backlog/NNN-<slug>.md`, that meets the backlog's [Definition of Ready](docs/backlog/README.md#definition-of-ready).
+- **Only build a `ready` ticket.** Such a ticket has a number and a design doc, `docs/backlog/NNNN-<slug>.md`, that meets the backlog's [Definition of Ready](docs/backlog/README.md#definition-of-ready).
 - **Only the user decides that a ticket is `ready`.** An agent may make the edit only after the user approves it in the same conversation, and only in a PR the user merges. The `refine-ticket` skill ([`.agents/skills/refine-ticket/SKILL.md`](.agents/skills/refine-ticket/SKILL.md)) gets an item to that point: it checks the design doc against the Definition of Ready, asks the user about open decisions, and gets an independent review first.
 - **Reviewers:** a PR that adds or changes a design doc in `docs/backlog/` can be checked against the Definition of Ready, the same list the skill uses.
-- **Claim it before starting:** run `scripts/ticket.sh claim next <agent-name>`, which claims the first free ready ticket, or `claim NNN-<slug>` for a ticket the user named.
-  - The claim is the ticket's branch on `origin`, named `NNN-<slug>`. The script creates it with a unique claim commit, pushes it create-only, and checks that `origin` has that commit. Only one agent can win, and no merge is needed.
+- **Claim it before starting:** run `scripts/ticket.sh claim next <agent-name>`, which claims the first free ready ticket, or `claim NNNN-<slug>` for a ticket the user named.
+  - The claim is the ticket's branch on `origin`, named `NNNN-<slug>`. The script creates it with a unique claim commit, pushes it create-only, and checks that `origin` has that commit. Only one agent can win, and no merge is needed.
   - If another agent wins a ticket first, `claim next` moves on to the next one. Exit code 3 means no free ticket is left.
   - Never delete, overwrite, or force-push another agent's branch. Only the user releases a claim.
 - **One ticket per branch and PR.** The PR moves the design doc to `docs/features/` and fills in its "Delivery and review" section. It also deletes the ticket's row and adds the feature to `docs/README.md`.

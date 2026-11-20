@@ -1,6 +1,6 @@
 # Project status
 
-Last updated 2026-11-18. This is a handoff note between working sessions. The system spec is in `docs/`; this file tracks where the work stands. Keep one fact or next step per line, so updates change a line rather than rewrite a paragraph.
+Last updated 2026-11-20. This is a handoff note between working sessions. The system spec is in `docs/`; this file tracks where the work stands. Keep one fact or next step per line, so updates change a line rather than rewrite a paragraph.
 
 ## Where things are
 
@@ -40,7 +40,7 @@ Last updated 2026-11-18. This is a handoff note between working sessions. The sy
 
 - **Repo:** `/home/groot/Share/dev/git/feisty`.
   - The project was renamed **test01**, but the directory keeps its old name on purpose.
-  - Feature branches are named after their ticket, `NNN-<slug>`. The number is given when the ticket is marked `ready` (see `docs/backlog/README.md`).
+  - Feature branches are named after their ticket, `NNNN-<slug>`, with a four-digit number. The number is given when the ticket is marked `ready` (see `docs/backlog/README.md`).
   - Remote `origin` is `git@github-test01:JD-cookie/Test01.git` on GitHub, reached over SSH through a write-enabled **deploy key** for this repo only (`~/.ssh/github_test01`, with an `~/.ssh/config` alias `github-test01`). The repo is **public**.
   - The `gh` CLI (2.46) is logged in as `JD-cookie` with a fine-grained token limited to Test01. It can read the repo and create PRs, but not Actions secrets, variables, or admin settings. Its config is in `~/.config/gh/hosts.yml`. `gh` resolves the `github-test01` alias without needing `-R`.
 - **Stack:**
@@ -49,8 +49,8 @@ Last updated 2026-11-18. This is a handoff note between working sessions. The sy
   - Spec: `docs/`.
   - Backlog: `docs/backlog/README.md` lists work not built yet, with design docs alongside it.
 - **Done:**
-  - Feature 001, accounts: sign up, log in, stay logged in, log out. Spec in `docs/features/001-accounts.md`.
-  - Feature 002, rate limiting of login and signup: limits per client (an IPv4 address or an IPv6 /64) and per client+email for failed logins. Counters are in Valkey when `VALKEY_URL` is set, otherwise in memory, and the limiter fails open. `TRUST_PROXY` is supported. Spec in `docs/features/002-rate-limiting.md`. Merged in PR #1, released as server 0.2.0.
+  - Feature 001, accounts: sign up, log in, stay logged in, log out. Spec in `docs/features/0001-accounts.md`.
+  - Feature 002, rate limiting of login and signup: limits per client (an IPv4 address or an IPv6 /64) and per client+email for failed logins. Counters are in Valkey when `VALKEY_URL` is set, otherwise in memory, and the limiter fails open. `TRUST_PROXY` is supported. Spec in `docs/features/0002-rate-limiting.md`. Merged in PR #1, released as server 0.2.0.
   - Environment support: dev, staging, and production app variants, the `/api/v1` prefix, the `X-App-Version` header with a `MIN_APP_VERSION` check that shows the "Update required" screen, and `/api/v1/meta`. Spec in `docs/devops.md`.
   - Device setup guides: `docs/dev-setup-phone.md` and `docs/dev-setup-android-studio-ubuntu.md`.
 
@@ -78,7 +78,9 @@ Last updated 2026-11-18. This is a handoff note between working sessions. The sy
   - 2026-11-18: #10 (ticket 003, the `refine-ticket` skill).
   - 2026-11-19: #11 (ticket 004, "Delete expired session rows", marked `ready`). Qodo found no issues.
   - 2026-11-19: #12 (ticket 003's last acceptance checks; 003 is implemented). Qodo found no issues.
-- **Open PRs:** none.
+- **Merged 2026-11-19:** #14, two reviewers in every refine-ticket round, stopping on blocking findings, ask after 5 rounds (f7f558e). Feature 003's check 2 is pending for those rules until the next refinement.
+- **Open PRs:** #13 (runner refinement, `ready-005`, waits on the user's read and approval; Qodo: no findings, CI green); #16 (four-digit ticket numbers, `backlog-ticket-number-digits`: renames the numbered docs to 0001–0004 and 0006, and every pattern). Right after #16 merges: rename `ready-005` to `ready-0005` on GitHub (PR #13 follows), and #13's ready commit uses `0005-agent-build.md`; #13 merges `main` and fixes its links.
+- **Ticket 0006, Keep the spec separate from the ticket history:** `ready` (PR #15 merged 2026-11-20). Build it next, before the runner's part 1; until it merges, the user starts no other ticket builds. Its worktree `scratchpad/wt-spec` (branch `ready-006`) can be removed.
 - **Release process:** works end to end.
   - Merging #1 made the App open #4, which bumped the server to 0.2.0 (`package.json`, the lockfile, the manifest, and `server/CHANGELOG.md`) and left the app at 0.1.0. CI ran on it.
   - Merging #4 created the tag `server-v0.2.0` and the GitHub Release "server: v0.2.0".

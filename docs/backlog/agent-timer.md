@@ -1,6 +1,6 @@
 # Start the runner on a timer
 
-Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNN-agent-timer.md`. It moves to `docs/features/` in the PR that builds it.
+Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNNN-agent-timer.md`. It moves to `docs/features/` in the PR that builds it.
 
 This is part 3 of 3, split on 2026-11-19 from "An agent that builds ready tickets on a timer":
 1. [A runner that builds a ready ticket into a PR](agent-build.md). **Blocks this one.**
@@ -65,7 +65,7 @@ systemd doesn't start a service that's still running, and part 1's lock covers a
 ## Tasks for the user
 
 - **After this PR merges:** run `scripts/agent-timer.sh install` on the machine, on `main`. The builder can't, because it starts the timer, and the timer should run the merged `main`. Check: `scripts/agent-timer.sh status` shows the timer.
-- **After that:** the real run (check 3). It happens after this PR merges, so its results go in a follow-up docs PR to this feature's "Delivery and review", as ticket 003's last checks did in PR #12.
+- **After that:** the real run (check 3). It happens after this PR merges, so its results go in a follow-up docs PR to this feature's "Delivery and review", as ticket 0003's last checks did in PR #12.
 - **Already done on this machine (2026-11-18):** linger is on.
 
 ## Implementation map
@@ -78,7 +78,7 @@ systemd doesn't start a service that's still running, and part 1's lock covers a
 
 1. **Timer units:** `scripts/agent-timer.sh install`, with the three XDG folders set to scratch directories and stubs for `systemctl`, `loginctl`, and `gh`, writes both units and the copy in `bin/`. The service has `TimeoutStartSec=4h`, `ExecStart` in `bin/`, and `Environment=` lines with those three folders. `systemd-analyze verify` on the two files exits 0 and prints no line that names either file. `uninstall` removes them. With `app.pem` readable by others (mode `644`), `check` and `install` stop, and write no unit. In `agent-run.test.sh`, printing `ok N`. Probed 2026-11-19 (systemd 259): `verify` exits 0 even for an unknown key, and only prints a warning, hence the check on its output. `--user verify` fails with no login session, as in CI, while plain `verify` works. A missing `ExecStart` program makes it exit 1.
 2. **The copy is what runs:** with `install` done and the user's checkout then switched to a branch whose `scripts/agent-run/settings.json` differs, a run started by the service stub gets `--settings` from `bin/`, with the installed content.
-3. **The real run** (Day 4 of the hackathon, with the user): with the timer installed and one small ticket `ready` ("Delete expired session rows", ticket 004), the runner claims it, builds it, opens a PR that Qodo reviews, and runs rounds until it reports `Ready for review by the user.` or stops with `needs-help`. Shown by the PR, its comments, and the runner's logs. Record what happened in this doc's "Delivery and review", in a follow-up docs PR (see "Tasks for the user"): who opened the PR (`jd-cookie-agent[bot]`), the checks, Qodo's findings, the rounds and retries, and where the user had to step in. It's the first real run of part 2's rounds. Part 1's real run by hand, on a second small ticket, comes before it (part 1's check 9).
+3. **The real run** (Day 4 of the hackathon, with the user): with the timer installed and one small ticket `ready` ("Delete expired session rows", ticket 0004), the runner claims it, builds it, opens a PR that Qodo reviews, and runs rounds until it reports `Ready for review by the user.` or stops with `needs-help`. Shown by the PR, its comments, and the runner's logs. Record what happened in this doc's "Delivery and review", in a follow-up docs PR (see "Tasks for the user"): who opened the PR (`jd-cookie-agent[bot]`), the checks, Qodo's findings, the rounds and retries, and where the user had to step in. It's the first real run of part 2's rounds. Part 1's real run by hand, on a second small ticket, comes before it (part 1's check 9).
 4. `npm run check` passes locally and in CI, and `docs/devops.md`'s runner section has the timer.
 
 ## Readiness review

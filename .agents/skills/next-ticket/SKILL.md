@@ -1,6 +1,6 @@
 ---
 name: next-ticket
-description: Pick up the next ready ticket from this repo's backlog (docs/backlog/README.md), claim it so no other agent takes it, build it on its own branch, and take it through its PR and review. Use when asked to work on the backlog, pick up a ticket, or build a numbered backlog item such as 003.
+description: Pick up the next ready ticket from this repo's backlog (docs/backlog/README.md), claim it so no other agent takes it, build it on its own branch, and take it through its PR and review. Use when asked to work on the backlog, pick up a ticket, or build a numbered backlog item such as 0003.
 ---
 
 # Next ticket
@@ -11,7 +11,7 @@ The backlog is `docs/backlog/README.md`. Its "How it works" section defines the 
 
 ```bash
 scripts/ticket.sh claim next <agent-name>        # the first free ready ticket
-scripts/ticket.sh claim NNN-slug <agent-name>    # only if the user named a ticket
+scripts/ticket.sh claim NNNN-slug <agent-name>    # only if the user named a ticket
 ```
 
 Picking and claiming are one step, so the time between seeing a ticket as free and claiming it stays short. `claim next` goes through `main`'s `ready` tickets in priority order, skips those already claimed (their branch exists on `origin`), and tries to claim the first free one. If another agent wins the race for it, it tries the next one. If a ticket stopped being `ready` after it was listed, it reads the list again once and starts over. It stops at the first ticket it wins. To see the tickets and which are claimed without claiming anything, run `scripts/ticket.sh list`.
@@ -19,7 +19,7 @@ Picking and claiming are one step, so the time between seeing a ticket as free a
 Don't build an `idea` or `designed` item, and don't mark anything `ready` yourself: only the user decides that, through the `refine-ticket` skill or by hand. If the user asks you to get an item ready, use `refine-ticket`.
 
 Use a name that tells agents apart, e.g. `claude-<short session id>`. The script, for each ticket it tries:
-- creates the branch `NNN-slug` from `origin/main`
+- creates the branch `NNNN-slug` from `origin/main`
 - commits the status `in progress (claim <id>, <agent>, <time>)`
 - pushes create-only, then checks that `origin` has *its* commit
 - fetches `main` again and checks that the ticket is still `ready`, with the design doc it was claimed with
@@ -28,16 +28,16 @@ What the exit codes mean:
 - **0:** the ticket is yours, and you're on its branch.
 - **3:** with `next`, no free ticket is left: stop and tell the user. With a named ticket, another agent got there first: tell the user, or run `claim next`. Never delete or overwrite another agent's branch, and never push to it with `--force`.
 - **2:** the ticket isn't `ready`, your checkout has changes (untracked files count), a local branch is in the way, or the claim commit failed. Your checkout is left as it was. Fix the cause or ask the user.
-- **4:** `origin` couldn't be reached, so the outcome isn't known. If the script kept your local branch, run `scripts/ticket.sh verify NNN-slug` once `origin` is reachable. It returns 0 if the claim is yours, 3 if it isn't (the message says whether to claim again), and 4 if `origin` still can't be reached. If there is no local branch, try the claim again.
+- **4:** `origin` couldn't be reached, so the outcome isn't known. If the script kept your local branch, run `scripts/ticket.sh verify NNNN-slug` once `origin` is reachable. It returns 0 if the claim is yours, 3 if it isn't (the message says whether to claim again), and 4 if `origin` still can't be reached. If there is no local branch, try the claim again.
 - **5:** the claim is yours, but the user withdrew or changed the ticket on `main` while you claimed it. Don't build it. Tell the user, and leave the branch: it still holds the claim, and only the user releases it.
 
 ## 2. Build it
 
-Read the ticket's design doc, `docs/backlog/NNN-slug.md`, all of it. Its acceptance checks define what "done" means. Also follow `AGENTS.md`: its rules apply to every ticket.
+Read the ticket's design doc, `docs/backlog/NNNN-slug.md`, all of it. Its acceptance checks define what "done" means. Also follow `AGENTS.md`: its rules apply to every ticket.
 
 - If the design doc turns out to be wrong or incomplete, don't guess at something big. Ask the user. Small gaps can be decided and written down in the doc.
 - In the same branch:
-  1. Move the design doc to `docs/features/NNN-slug.md` (`git mv`) and update it to match what was built, including the implementation map.
+  1. Move the design doc to `docs/features/NNNN-slug.md` (`git mv`) and update it to match what was built, including the implementation map.
   2. Add the feature to the Features table in `docs/README.md`.
   3. Delete the ticket's row from `docs/backlog/README.md`. That also removes the claim status.
   4. Fix any links to the old path. Operational changes also go in `docs/devops.md`.
@@ -48,7 +48,7 @@ Read the ticket's design doc, `docs/backlog/NNN-slug.md`, all of it. Its accepta
 
 - **Title:** a Conventional Commits title. The type and scope should match the change, e.g. `feat(server): delete expired session rows`. Use `!` for breaking changes.
 - **Body:**
-  - Start with `Ticket: NNN-slug (docs/features/NNN-slug.md)`.
+  - Start with `Ticket: NNNN-slug (docs/features/NNNN-slug.md)`.
   - Then what was built.
   - Then each acceptance check and how it was verified.
   - End with the attribution line.

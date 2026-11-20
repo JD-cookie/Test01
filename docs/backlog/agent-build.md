@@ -1,6 +1,6 @@
 # A runner that builds a ready ticket into a PR
 
-Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNN-agent-build.md`. It moves to `docs/features/` in the PR that builds it.
+Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNNN-agent-build.md`. It moves to `docs/features/` in the PR that builds it.
 
 This is part 1 of 3, split on 2026-11-19 from "An agent that builds ready tickets on a timer", which was too big for one PR (Definition of Ready, item 4):
 1. **This one:** the runner, run by hand, claims a `ready` ticket, builds it, gets the checks green, and opens the PR as the App.
@@ -75,7 +75,7 @@ The agent can edit everything in the clone, so nothing the runner trusts is read
 
 1. In the clone: `git fetch`, then switch to a clean `main` at `origin/main`, and delete every other local branch: the clone is the runner's own, and what matters is on `origin`. A local branch left by a run that failed would make the next claim fail. Then `npm ci` at the root and in `server/` and `app/`, so the hooks and checks run as in CI.
 2. `scripts/ticket.sh claim next "runner-<id>"`. Its exit codes (see `scripts/ticket.sh`):
-   - **0:** claimed. The script has already pushed the claim branch, `NNN-slug`, whose commit has the trailer `Claimed-By: runner-<id>`.
+   - **0:** claimed. The script has already pushed the claim branch, `NNNN-slug`, whose commit has the trailer `Claimed-By: runner-<id>`.
    - **3:** no free ticket. Exit 0.
    - **5:** claimed, but the ticket was withdrawn or changed on `main` meanwhile. Stop, as in "Stopping for help", with the script's message.
    - **anything else (2, 4):** log the message and exit 1. If the claim reached `origin` after all, the next run finds the branch with no PR, and stops for help.
@@ -99,7 +99,7 @@ Whenever the runner stops for the user, it does the same. In this part, that's a
 
    To restore in a fresh clone: check out `base.txt`'s commit; if `commits.bundle` exists, `git fetch <run folder>/commits.bundle HEAD` and `git checkout FETCH_HEAD`; if `uncommitted.patch` exists, `git apply` it. Files that weren't needed aren't written, since `git am` fails on an empty patch (probed: "Patch format detection failed", exit 128). That works whether or not step 2 pushes the commits afterwards.
 2. **Push** the branch if it has commits that `origin` doesn't, unless the reason for stopping is that GitHub refused the push (a workflow change). Then `origin` keeps only what's there, and the PR's description names the saved files.
-3. **Open a draft PR** from the branch with the labels `agent-run` and `needs-help`, with the title from `.agent/pr.md` if it passes the title check, or else `chore(repo): build ticket NNN-slug`. Its description holds everything the user needs: the reason, the run folder's path, and the names of the saved files first, then the last 200 lines of output if there are any, then the body from `pr.md` if there is one. The whole description is kept under 60,000 characters, below GitHub's limit of 65,536: the reason is cut to 5,000 if it's longer, and the output and the body are cut, from their start, to fit what's left, with a line that says so. The run's folder keeps them whole. It's one call, so a crash leaves either no PR, which the next run handles as above, or a complete one: never a draft that doesn't say why.
+3. **Open a draft PR** from the branch with the labels `agent-run` and `needs-help`, with the title from `.agent/pr.md` if it passes the title check, or else `chore(repo): build ticket NNNN-slug`. Its description holds everything the user needs: the reason, the run folder's path, and the names of the saved files first, then the last 200 lines of output if there are any, then the body from `pr.md` if there is one. The whole description is kept under 60,000 characters, below GitHub's limit of 65,536: the reason is cut to 5,000 if it's longer, and the output and the body are cut, from their start, to fit what's left, with a line that says so. The run's folder keeps them whole. It's one call, so a crash leaves either no PR, which the next run handles as above, or a complete one: never a draft that doesn't say why.
 
 ### The agent's files
 
@@ -190,7 +190,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/
 
   The builder checks 4 with `gh api repos/<owner>/<repo>/rules/branches/main`, which must list `pull_request`, `non_fast_forward`, and `deletion`, and `gh api repos/<owner>/<repo>/rulesets/<id>`, which must show `"enforcement": "active"` and no `bypass_actors`. If the user's token can't read `bypass_actors`, the builder asks the user to confirm "Bypass list: empty" on the ruleset's page. Step 3 shows on the runner's first real PR: Qodo reviews it. The next release PR shows that Qodo still skips release-please.
 - **After this PR merges, before part 3 (Q9):**
-  5. **A second small ticket for a real run by hand:** pick a small backlog item other than 004, refine it with `refine-ticket`, and mark it `ready` as usual. Put its row above 004's in `docs/backlog/README.md`, since `claim next` takes the first free ready ticket in the table's order, in the same `ready` PR. Then, on `main`, check that `scripts/ticket.sh list` shows it before 004, and run `scripts/agent-run.sh` by hand (check 9). Ticket 004 stays kept for part 3's real run on Day 4.
+  5. **A second small ticket for a real run by hand:** pick a small backlog item other than 0004, refine it with `refine-ticket`, and mark it `ready` as usual. Put its row above 0004's in `docs/backlog/README.md`, since `claim next` takes the first free ready ticket in the table's order, in the same `ready` PR. Then, on `main`, check that `scripts/ticket.sh list` shows it before 0004, and run `scripts/agent-run.sh` by hand (check 9). Ticket 0004 stays kept for part 3's real run on Day 4.
 
 ## Implementation map
 
@@ -240,7 +240,7 @@ Checks 1 to 6 are in `scripts/test/agent-run.test.sh`. It runs the runner agains
    - with a real `bwrap`, when the machine has one (skipped in CI if it doesn't), a check stub that tries to read a file under a fake secret folder fails to read it, and one that connects to a listener the test started on `127.0.0.1`, which it reached from outside first, fails. `agent-run.sh check`'s two sandbox checks pass with the real `bwrap`, and fail with a `bwrap` stub that runs its command directly, so it hides no file and has the host's network
 7. **The real setup:** on the user's machine, after tasks 1 and 2, `scripts/agent-run.sh check` passes every check, including making a token, and nothing changes on GitHub. The builder records its output, without the token, in "Delivery and review".
 8. `npm run check` passes locally and in CI, and `docs/devops.md` has the runner's section.
-9. **The real run by hand** (after this PR merges, with the user; Q9): with tasks 1 to 5 done, and a small ticket `ready` above 004 in the backlog, `scripts/agent-run.sh` on `main` claims that ticket, and not 004, builds it with the real `claude`, gets the checks green, and opens a PR as `jd-cookie-agent[bot]`, or stops with a draft PR and `needs-help`. Shown by the PR and the runner's log. Qodo reviews the PR, which shows task 3 works, and the user takes it through review and merges, since rounds are part 2's. It happens after this PR merges, so what happened goes in a follow-up docs PR to this feature's "Delivery and review", as ticket 003's last checks did in PR #12: who opened the PR, the tries and checks, Qodo's findings, and where the user had to step in.
+9. **The real run by hand** (after this PR merges, with the user; Q9): with tasks 1 to 5 done, and a small ticket `ready` above 0004 in the backlog, `scripts/agent-run.sh` on `main` claims that ticket, and not 0004, builds it with the real `claude`, gets the checks green, and opens a PR as `jd-cookie-agent[bot]`, or stops with a draft PR and `needs-help`. Shown by the PR and the runner's log. Qodo reviews the PR, which shows task 3 works, and the user takes it through review and merges, since rounds are part 2's. It happens after this PR merges, so what happened goes in a follow-up docs PR to this feature's "Delivery and review", as ticket 0003's last checks did in PR #12: who opened the PR, the tries and checks, Qodo's findings, and where the user had to step in.
 
 ## Readiness review
 
@@ -248,7 +248,7 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5), as the whole of "An agent t
 
 - **Goal, restated (the whole):** for the user, who wants ready tickets built without starting a session for each. A script, started every 15 minutes by a systemd user timer, does one step per run: claim and build a ready ticket, get the checks green, open the PR, then run a fix round on each Qodo review, up to set limits, and stop with `needs-help` when stuck. The user still marks tickets ready and merges.
 - **Goal, restated (this part):** for the user: one command, run by hand, that claims and builds the next ready ticket and opens its PR as the App, with the checks green or a draft PR asking for help.
-- **The split** (the user's decision, 2026-11-19): after round 2 the doc was about 410 lines, and failed Definition of Ready item 4 ("Fits one PR … small enough for one agent session"). Split into three vertical slices: this one, then [the review rounds](agent-review-rounds.md), then [the timer](agent-timer.md). Each part keeps its own sections and decisions. This one changed in the split: a run that finds its PR open does nothing (the review step is part 2); the prompts and settings are read from beside the running script (the copy in `bin/` is part 3's); the setup checks moved here, as `agent-run.sh check`, from `agent-timer.sh check`; label creation moved here from the timer; and this part's real check is `agent-run.sh check` with the real key, since ticket 004 is kept for Day 4's real run in part 3.
+- **The split** (the user's decision, 2026-11-19): after round 2 the doc was about 410 lines, and failed Definition of Ready item 4 ("Fits one PR … small enough for one agent session"). Split into three vertical slices: this one, then [the review rounds](agent-review-rounds.md), then [the timer](agent-timer.md). Each part keeps its own sections and decisions. This one changed in the split: a run that finds its PR open does nothing (the review step is part 2); the prompts and settings are read from beside the running script (the copy in `bin/` is part 3's); the setup checks moved here, as `agent-run.sh check`, from `agent-timer.sh check`; label creation moved here from the timer; and this part's real check is `agent-run.sh check` with the real key, since ticket 0004 is kept for Day 4's real run in part 3.
 - **Is it needed:** not built: `scripts/` has only `ticket.sh`, and no timer or runner is in the repo or the docs. Overlaps: "Code reviews by our own agents" is a separate row, out of scope here. No open PRs. Never dropped: the backlog history has no runner or scheduled build.
 - **Facts checked while refining:**
   - `scripts/ticket.sh claim` pushes the claim branch itself, with a `Claimed-By:` trailer, and has exit code 5 for a ticket withdrawn during the claim. Added to the build step.
@@ -284,7 +284,7 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5), as the whole of "An agent t
   - Q8: round 2's reviewers, after a tie (14 kept each) → both again.
   - Naming: the runner's local folders, units, lock, and marker → `jd-cookie-agent`, like the App (the user's request, 2026-11-19).
   - Split → yes, into three parts (2026-11-19).
-  - Q9: a real run of this part by hand, before part 3, needs a `ready` ticket other than 004 → yes (2026-11-19): a second small ticket, refined and marked ready after this part merges, and run by hand (task 5, check 9).
+  - Q9: a real run of this part by hand, before part 3, needs a `ready` ticket other than 0004 → yes (2026-11-19): a second small ticket, refined and marked ready after this part merges, and run by hand (task 5, check 9).
 - **Probes:** `systemd-analyze verify` (part 3); `bwrap` hiding files, blocking the network, and running the server's tests (see "The agent"); `claude -p` in a systemd user service (part 3).
 - **Review round 1 (the whole):** Codex (gpt-6.1-sol) and opencode (ollama-cloud/kimi-k3.1-pro), run separately. Both restatements match the goal. They made 28 findings, 14 each. 7 problems were found by both, so 21 in all. All were kept: 19 fixed in the doc, 2 turned into questions (Q6, Q7).
   - Both: a merged or closed PR looked like a crashed build (only open PRs were listed). Fixed: PRs in every state, by branch.
@@ -306,7 +306,7 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5), as the whole of "An agent t
   - opencode: no check covered pending or failed CI. Fixed: in checks 4 and 5.
   - opencode: an owner's review body, with no inline comment, was left out. Fixed: review bodies are collected.
   - opencode: the agent can't run the Valkey tests. Fixed: the doc says CI runs them, and a failure comes back as a failed job.
-  - opencode: the real run comes after the merge, but "Delivery and review" is filled before. Fixed: a follow-up docs PR, as for ticket 003. Also a wrong check number.
+  - opencode: the real run comes after the merge, but "Delivery and review" is filled before. Fixed: a follow-up docs PR, as for ticket 0003. Also a wrong check number.
   - opencode (needs a run): Qodo's comment may not start with "Code Review by Qodo". Probed: it starts with a blank line or `<h3>`, and the "PR Summary by Qodo" comment names the same commit. Fixed: the heading is matched anywhere, and the fixtures are real comments.
   - Dropped: 0.
   - Kept for later rounds: asked the user (Q8), since both had 14 kept.
@@ -365,7 +365,7 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5), as the whole of "An agent t
 - **Q9 answered** (2026-11-19), after round 4: yes, a second small ticket for a real run by hand, after this part merges and before part 3 (task 5, check 9). Definition of Ready items 7 and 10 pass.
 - **Review round 5 (this part):** Codex (gpt-6.1-sol) only, at the user's choice, asked for findings that would make a build wrong or need a question. The restatement matches. 2 findings, both kept and fixed in the doc.
   - Codex: a run's setup check opens a TCP listener, so every runner test, not just the listener cases, would fail inside the sandbox. Probed: inside `bwrap --unshare-net`, `/proc/net/dev` lists only `lo`, also nested, while `/sys/class/net` shows the host's interfaces. Fixed: the setup's network check reads `/proc/net/dev`, and only check 6's listener case needs a listener.
-  - Codex: `claim next` takes the first ready ticket in the table's order, so check 9 would claim 004. Fixed: task 5 puts the second ticket's row above 004's, and checks `ticket.sh list` first.
+  - Codex: `claim next` takes the first ready ticket in the table's order, so check 9 would claim 0004. Fixed: task 5 puts the second ticket's row above 0004's, and checks `ticket.sh list` first.
 
 ## Decisions made for this ticket
 
