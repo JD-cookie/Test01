@@ -180,6 +180,10 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5).
   - opencode: refine-ticket step 9.3 fixes links to a renamed doc everywhere in `docs`, frozen ticket docs included (`refine-ticket/SKILL.md:156`). Fixed: outside `docs/tickets/` only.
   - opencode: check 2's expected hits left out the conversion instructions. Fixed: listed.
   - opencode: check 5 relied on the builder's word. Fixed: commands and output, including that every acceptance check of the converted ticket is in a spec doc.
+- **Review round 5:** Codex (gpt-6.1-sol) and opencode (ollama-cloud/kimi-k3.1-pro), blocking findings only. Both restatements match. Codex: no findings, and round 4's fixes hold. opencode: 3 findings, all checked and kept, all blocking, all in the conversion of an old-layout ticket; none dropped. Not fixed yet: after five rounds with blocking findings, the user was asked how to go on.
+  - opencode: step 4's "if the doc is in `docs/features/`, convert it" fires again after the conversion, since the stub or spec stays there. Needs: convert only while `docs/tickets/NNN-<slug>.md` doesn't exist.
+  - opencode: check 5 runs only when this PR converts a ticket, not when an open PR converts itself, and has no assertions for the "Both" case.
+  - opencode: step 6's "fix links to the old path" is ambiguous for a conversion, whose old path stays as a stub or spec.
 
 ## Decisions made for this ticket
 
