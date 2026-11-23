@@ -72,7 +72,7 @@ Each rule says where it applies and why it exists. Reviewers should flag changes
 - A built ticket's doc moves from `docs/backlog/` to `docs/tickets/`, with stable links (see "Writing a feature doc" in `docs/README.md`), and is **frozen** once its PR merges. Its row leaves `docs/backlog/README.md`.
 - A spec doc is **never renamed or deleted** once the PR that adds it has merged. A design doc in `docs/backlog/` can be renamed until then. A removed capability's doc becomes a stub.
 
-**Applies to:** the spec update, every PR that touches `app/`, `server/`, or `.github/`. Docs-only, test-only, and release PRs are exempt from it. The other two hold for every PR, docs-only ones included, since those are the likeliest to rename a spec doc or edit a frozen ticket doc.
+**Applies to:** the spec update, every PR that touches `app/`, `server/`, or `.github/`. Docs-only, test-only, and release PRs are exempt from it. The other rules here (a built ticket's doc moves to `docs/tickets/` with stable links and is frozen, and spec docs keep their names) hold for every PR, docs-only ones included, since those are the likeliest to rename a spec doc or edit a frozen ticket doc.
 
 **Why:** the docs are the spec of the system, not a description written afterwards. Docs written later drift from the code, and a later rebuild, or the next agent, can't trust them. Keeping each spec doc current, with the history in ticket docs, gives one place that says what the system does now. Links to spec docs come from frozen ticket docs and from release-please's changelogs, which can't be edited (rule 4), so spec docs keep their names.
 

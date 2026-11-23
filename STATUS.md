@@ -1,6 +1,6 @@
 # Project status
 
-Last updated 2026-11-20. This is a handoff note between working sessions. The system spec is in `docs/`; this file tracks where the work stands. Keep one fact or next step per line, so updates change a line rather than rewrite a paragraph.
+Last updated 2026-11-22. This is a handoff note between working sessions. The system spec is in `docs/`; this file tracks where the work stands. Keep one fact or next step per line, so updates change a line rather than rewrite a paragraph.
 
 ## Where things are
 
@@ -78,7 +78,7 @@ Last updated 2026-11-20. This is a handoff note between working sessions. The sy
   - 2026-11-18: #10 (ticket 003, the `refine-ticket` skill).
   - 2026-11-19: #11 (ticket 004, "Delete expired session rows", marked `ready`). Qodo found no issues.
   - 2026-11-19: #12 (ticket 003's last acceptance checks; 003 is implemented). Qodo found no issues.
-- **Merged 2026-11-19:** #14, two reviewers in every refine-ticket round, stopping on blocking findings, ask after 5 rounds (f7f558e). Feature 003's check 2 is pending for those rules until the next refinement.
+- **Merged 2026-11-19:** #14, two reviewers in every refine-ticket round, stopping on blocking findings, ask after 5 rounds (f7f558e). Ticket 0003's check 2 passed for those rules in ticket 0006's refinement (recorded in `docs/tickets/0003-refine-ticket-skill.md`).
 - **Merged 2026-11-22:** #17 (604e8e2), the runner design in three parts, all `designed`. The user approved part 1 on 2026-11-22; it's marked `ready` in its own PR once 0006 is built (it's blocked by 0006). 0005 is free again.
 - **Open PRs:** #18, building ticket 0006 (branch `0006-spec-and-tickets`, claim `8a067552`): spec docs in place with Changes lists, built ticket docs in `docs/tickets/`, 0003 converted. Checks 1 to 6 pass. In review. After it merges: mark the runner's part 1 `ready` (its blocker is then built), then build it; it's check 7 of 0006.
 - **Merged 2026-11-20:** #15 (ticket 0006 marked `ready`), #16 (four-digit ticket numbers; the release changelogs' links to the accounts doc were edited once, with the user's approval, as an exception to rule 4).

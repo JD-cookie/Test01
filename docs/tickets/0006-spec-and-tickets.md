@@ -213,6 +213,7 @@ Built on branch `0006-spec-and-tickets`, claimed with `scripts/ticket.sh claim 0
 - "What changes in this ticket's own PR": the runner's three parts were already fitted to this layout by PR #17, which merged first, so this PR changed only the status lines of 0004 and the container image. The container image changes `docs/devops.md` only, so that's the spec doc its line names.
 - `refine-ticket` step 9.1's "Blocked by" check, prose only before, now has a command, so check 1 could run the skill's own text. It prints `not built: <title>` with the reason, or nothing.
 - 0003's check 2 line said "no refinement has run them yet", which would be wrong in a frozen doc. So the result of the pending note went in that line as well as in its "Changed after delivery" note. Both are part of the one change named in "Processing".
+- `AGENTS.md` rule 3 has the ticket doc's move, stable links and freeze as one bullet, and the never-renamed rule as another. So its "Applies to" names them, rather than counting them as the design's "the other three" did.
 - `docs/tickets/README.md` names `docs/backlog/` as plain text rather than as a link. The index isn't a ticket doc, but its link was the only one check 3's checker flagged, and plain text keeps the folder stable either way.
 
 **Acceptance checks:**
@@ -223,7 +224,7 @@ Built on branch `0006-spec-and-tickets`, claimed with `scripts/ticket.sh claim 0
    - it printed `not built: Thing Z (not in docs/tickets/README.md or the Features table)` for an unknown item
    - after a row for "Thing X" was added back to the backlog, it printed `not built: Thing X (its row is still in the backlog)`
 2. **Pass.** `grep -rnE "features/" AGENTS.md docs .agents --include=*.md --exclude-dir=tickets`: no hit tells anyone to move a ticket's doc into `features/`. The hits, by kind:
-   - **links to spec docs:** `docs/README.md` (the Features table), `docs/devops.md:21` and `:47`, `docs/backlog/README.md` (the 0004, Password reset, Email verification, HTTPS, and Login challenge rows, and the ticket commands row), and `0004-delete-expired-sessions.md:7` and `:29`
+   - **links to spec docs:** `docs/README.md` (the Features table), `docs/devops.md:21` and `:47`, `docs/backlog/README.md` (the 0004, Password reset, Email verification, Staging/production database and Valkey, HTTPS, and Login challenge rows, and the ticket commands row), and `0004-delete-expired-sessions.md:7` and `:29`
    - **what a spec doc is, or an instruction to write or edit one:**
      - `AGENTS.md:13` and `:71`
      - `docs/README.md:8`, `:46` and `:54`
@@ -259,7 +260,14 @@ Built on branch `0006-spec-and-tickets`, claimed with `scripts/ticket.sh claim 0
 
 `npm run check` passed (server typecheck and 23 tests, app typegen, lint, and typecheck).
 
-**Review (PR #18):** filled in as Qodo's findings come.
+**Review (PR #18):**
+- **Independent review** (2026-11-22, at the user's request), by Codex (gpt-6.1-sol) and opencode (ollama-cloud/deepseek-v4-pro), run separately in read-only review copies of the branch, as `refine-ticket` step 7 runs them. Both restatements match, and neither found anything blocking. 5 findings, all minor, checked against the files: 4 fixed, 1 answered.
+  - Codex: check 2's list of hits left out the "Staging/production database and Valkey" row (`docs/backlog/README.md:86`). Fixed: added.
+  - Codex: `STATUS.md` still said 0003's check 2 was pending, and was dated 2026-11-20. Fixed: it gives the result, and the date is 2026-11-22.
+  - opencode: the design's "the other three hold for every PR" became "the other two" in rule 3. Fixed: rule 3 names them, and the change is recorded above.
+  - opencode: 0003's check 2 still said "Pending … until a refinement ran them", with the result only in "Changed after delivery". Fixed: it says they passed in 0006's refinement.
+  - opencode (needs a run): the permalink to 0003's spec at 41516db names the three-digit file `003-refine-ticket-skill.md`. Run: `git cat-file -e 41516dbd2ca3663dd210b6a4aa6457aa64dfb92e:docs/features/003-refine-ticket-skill.md` succeeds, since the four-digit names came later, in PR #16. Answered: it's right, and check 3's checker tests it too.
+  - Both copies' `git status --porcelain --ignored` was the same after the review as before.
 
 **Rules, skills, or reviewer context:** none to change beyond this ticket. Check 3's link checker would be worth keeping: it's the "link checker in CI" left out of scope, and the known gap in "Security and configuration".
 
