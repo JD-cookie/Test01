@@ -79,7 +79,7 @@ The agent can edit everything in the clone, so nothing the runner trusts is read
    - **3:** no free ticket. Exit 0.
    - **5:** claimed, but the ticket was withdrawn or changed on `main` meanwhile. Stop, as in "Stopping for help", with the script's message.
    - **anything else (2, 4):** log the message and exit 1. If the claim reached `origin` after all, the next run finds the branch with no PR, and stops for help.
-3. **Build**, try 1 of 3: run the agent with the build prompt (see "The agent"). It follows the `next-ticket` skill's step 2, and commits, but doesn't push. If it wrote `.agent/stop.md`, stop, as in "Stopping for help", with `stop.md` as the comment.
+3. **Build**, try 1 of 3: run the agent with the build prompt (see "The agent"). It follows the `next-ticket` skill's step 2, and commits, but doesn't push. If it wrote `.agent/stop.md`, stop, as in "Stopping for help", with `stop.md` as the comment. If it hit Claude's usage limit, stop at once (see "Claude's usage limit"), here and in every fix try.
 4. **Checks:** first, the clone must have no changes the agent didn't commit: `git status --porcelain` lists nothing (`.agent/` is ignored). If it lists something, that's a failed try, with the list as its output, so the checks always test what gets pushed. Then the runner itself runs `npm run check` in the clone, in the sandbox (see "The agent"), with a time limit of 20 minutes (`timeout --kill-after=1m 20m`). A check that runs out of time is a failed try. The runner doesn't take the agent's word for it. After the checks and the title check, the clone must still be clean and at the same `HEAD`: the checks run code the agent wrote, which could change a tracked file and test that instead. If not, that's a failed try too.
    - **Pass:** go to 5.
    - **Fail:** run the agent again with the fix prompt and the check's output (the last 200 lines), then check again. That's try 2, then try 3.
@@ -125,6 +125,14 @@ The prompts live in `scripts/agent-run/` as Markdown files (`build.md`, `fix-che
 - don't push, and don't touch `server/.env` or `server/data/`
 - if the design doc is wrong or something needs the user's decision, write that to `.agent/stop.md` and stop. The runner then stops for help, with `stop.md` as the reason.
 
+### Claude's usage limit
+
+The agent runs on the user's Claude login (see "Security and configuration"), so it shares the user's 5-hour and weekly usage limits with the user's own sessions. Once a limit is reached, each `claude -p` run ends at once without doing the work. Without a rule for it, all 3 tries would fail in seconds, and the draft PR would wrongly say the checks failed.
+
+So after each agent run, the runner checks for the limit: `claude` exited non-zero, and one of the last 20 lines of its output matches one of the patterns in `LIMIT_PATTERNS`, a constant at the top of `agent-run.sh` (case-insensitive: `usage limit reached`, `hit your limit`, `limit reached.*resets`). If so, it doesn't try again: it stops, as in "Stopping for help", with the reason "Claude's usage limit was reached during try N of 3:" and the matching line, which says when it resets, then "The work so far is on this branch." The user finishes the ticket, or waits for the reset. Both conditions are needed because the agent's own output can contain the same words (the repo has a rate limiter), and a run that exits 0 did its work.
+
+Not probed: the exact text and exit code of `claude -p` at a usage limit, since a probe would have to reach a limit. The patterns are the builder's best knowledge, and the builder records in "Delivery and review" which ones came from where. If a limit isn't recognized, the run behaves as before (failed tries, then a stop for help) and the run's log has the real text, so the patterns can be fixed then. Waiting for the reset and going on without the user is a later backlog item, "The runner waits out Claude's usage limit".
+
 ### The App's token
 
 The runner needs a token for every GitHub call and push. It makes a new one before each phase of a run ("One run", step 3). Each lasts an hour. `scripts/agent-token.sh` makes one:
@@ -162,6 +170,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/
 - **Failure modes:**
   - GitHub can't be reached: the run logs the failed command and exits 1. The next run tries again.
   - The agent fails or times out: that counts as a failed try.
+  - Claude's usage limit: the run stops for help at once, with the reset time (see "Claude's usage limit").
   - Two runs at once: the lock.
   - A crash mid-build: the next run finds a claim with no PR and stops for help.
 - **The project's rules:**
@@ -173,7 +182,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/
 - **No new settings.** The limits and the labels are constants at the top of `agent-run.sh`. For the tests only, `AGENT_RUN_ORIGIN` replaces the clone's `origin` URL (by default `https://github.com/<owner>/<repo>.git`), and `AGENT_RUN_GITHUB_API` the API's base URL. The tests set `GIT_ALLOW_PROTOCOL=file`, so no git command in them can reach GitHub.
 - **Known gaps:**
   - The agent can run `npm` scripts, which can run any code in the repo, like the hooks and tests already do.
-  - The time limit doesn't cap cost. `--max-budget-usd` only applies to API keys, and this uses the user's login.
+  - The time limit doesn't cap cost. `--max-budget-usd` only applies to API keys, and this uses the user's login. A build uses up part of the user's usage limits, which their own sessions share.
   - **The agent can read the machine's credentials:** it runs as the user, so an allowed command such as `node -e` can read `app.pem`, the user's `gh` token (`~/.config/gh/hosts.yml`), and the deploy key (`~/.ssh/github_test01`, which can push to Test01), despite Claude's rules. It could then send them anywhere: an allowed `node` or `npm` command can reach any host. Only the checks and the title check, in the sandbox, have no network. What limits the damage: the App and the `gh` token reach only this repo, the ruleset keeps everyone off `main` except by a merged PR, and the user can revoke the App key or the deploy key on GitHub. Closing the gap is two backlog items (the user's decision, 2026-11-19): "Run the runner's agent as its own Linux user", then "A credential broker for the runner".
   - Anyone else with the user's account on this machine can read `app.pem` too, and act as the App on this repo. Revoking the key on the App's page stops that.
 
@@ -215,6 +224,7 @@ Checks 1 to 6 are in `scripts/test/agent-run.test.sh`. It runs the runner agains
 2. **Build:** with one `ready` ticket, a run creates its claim branch on the bare `origin`, calls `claude` once with the build prompt, runs the check stub once, pushes the branch, and calls `gh pr create` with the label `agent-run` and the title from `.agent/pr.md`. The labels are created first when the `gh` stub says they don't exist.
 3. **Check retries:** with the check stub failing every time, the run calls `claude` 3 times in all, then opens a draft PR with `needs-help`. The run folder has `base.txt`, `commits.bundle`, and `uncommitted.patch`: with the agent stub making one commit and leaving one new untracked file and one changed binary file, restoring them in a fresh clone of the bare `origin`, as "Stopping for help" says, gives the clone's tree exactly: both when the stop pushed the commit, and when the push was refused. With the agent stub making a merge commit, the restored history has the merge. With the agent stub writing `stop.md` and changing nothing, the folder has only `base.txt`, and restoring it gives the base. With an agent stub that ignores SIGTERM, its try ends at the kill time (shortened by the test). With a check stub that changes a tracked file and passes, the try fails. With a 70,000-character `stop.md`, output, and `pr.md` body, the draft's description is under 60,000 characters and starts with the reason and the run folder. With the check stub hanging, the try fails after the time limit (shortened by the test), and the next try runs. With it failing once, then passing, it opens a normal PR after 2 tries. With a `pr.md` title that commitlint rejects, the title counts as a failed check, and `gh pr create` is never called with it; with a good title, the real commitlint passes it (no stub). With the agent stub replacing `commitlint.config.mjs` in the clone by one that accepts every title and writes a file when loaded, a title only `main`'s config rejects still fails, and the file isn't written. With a commitlint stub that hangs, the title check fails after its time limit (shortened by the test). With the agent stub leaving an uncommitted change, the try fails before `npm run check` runs, and the fix prompt gets `git status`'s list.
    - **Stops before a PR:** with the agent stub writing `.agent/stop.md`, the run opens a draft PR with `needs-help` and `stop.md` in its description, in the one `gh pr create` call, and posts no comment. With the `gh`/push stub refusing a push that changes `.github/workflows/`, it opens the draft PR from the branch as it is on `origin`, and the description names the saved files.
+   - **Usage limit:** with the agent stub printing `Claude AI usage limit reached` and a reset time as its last line and exiting 1, in try 1, the run calls `claude` once, never runs the check stub, and opens a draft PR with `needs-help` whose description starts with the limit reason and that line. The same in try 2 (after a failed check) stops after 2 `claude` calls. With the stub printing the same line but exiting 0, or exiting 1 with no matching line, the try counts as an ordinary failed try.
    - **Bad agent output:** with `.agent/pr.md` left over from an earlier try and the agent stub writing nothing, the try fails. With the build try writing `pr.md`, the checks failing once, and the fix try writing `pr.md` again, the PR gets the fix try's title, and the fix prompt held the build try's `pr.md`.
 4. **Crash, lock, and open PRs:**
    - a claim branch with no PR gets a draft PR with `needs-help`, and no `claude` call
@@ -372,6 +382,7 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5), as the whole of "An agent t
   - its spec becomes `docs/features/NNNN-agent-runner.md`, which parts 2 and 3 edit in place, with a short operating section in `docs/devops.md` (the user's choice, over `docs/devops.md` only)
   - renamed from `agent-build` to `agent-runner`, since a spec doc is never renamed and this one covers all three parts (the user's choice)
   - each real run is recorded in the doc of the ticket it built, in that ticket's PR, since this ticket's doc is frozen once its PR merges: this replaces round 2's "follow-up docs PR" fix
+- **Claude's usage limit** (2026-11-22, the user's question): a 5-hour or weekly limit would have failed all 3 tries in seconds, with a stop that blamed the checks. Added: the runner recognizes the limit, stops for help at once with the reset time, and has a test (check 3). The text `claude -p` prints at a limit isn't probed. Waiting for the reset without the user is a later backlog item (the user's choice, over doing it in this part).
 
 ## Decisions made for this ticket
 
