@@ -3,7 +3,7 @@
 Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNNN-agent-timer.md`. In the PR that builds it, it moves to `docs/tickets/` (ticket 0006's layout), and that PR edits the runner's spec doc, `docs/features/0007-agent-runner.md`, in place.
 
 This is part 3 of 3, split on 2026-11-19 from "An agent that builds ready tickets on a timer":
-1. [A runner that builds a ready ticket into a PR](0007-agent-runner.md). **Blocks this one.**
+1. [A runner that builds a ready ticket into a PR](../features/0007-agent-runner.md). **Blocks this one.**
 2. [The runner fixes Qodo's findings on its PRs](agent-review-rounds.md). **Blocks this one.**
 3. **This one:** the timer.
 
@@ -84,7 +84,7 @@ systemd doesn't start a service that's still running, and part 1's lock covers a
 
 ## Readiness review
 
-Split on 2026-11-19 from "An agent that builds ready tickets on a timer", after its review round 2. That doc's two review rounds covered this part's design too; their record is in [agent-runner.md](0007-agent-runner.md#readiness-review). This part hasn't been reviewed on its own yet, and its Definition of Ready hasn't been checked on its own: that's its next refinement, after parts 1 and 2.
+Split on 2026-11-19 from "An agent that builds ready tickets on a timer", after its review round 2. That doc's two review rounds covered this part's design too; their record is in [the runner's ticket](../tickets/0007-agent-runner.md#readiness-review). This part hasn't been reviewed on its own yet, and its Definition of Ready hasn't been checked on its own: that's its next refinement, after parts 1 and 2.
 
 Answered questions that apply here (see part 1's record): Q3 (the probe of `claude -p` under `systemd-run --user`: it worked).
 

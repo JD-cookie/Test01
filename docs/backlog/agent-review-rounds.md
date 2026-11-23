@@ -3,7 +3,7 @@
 Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNNN-agent-review-rounds.md`. In the PR that builds it, it moves to `docs/tickets/` (ticket 0006's layout), and that PR edits the runner's spec doc, `docs/features/0007-agent-runner.md`, in place.
 
 This is part 2 of 3, split on 2026-11-19 from "An agent that builds ready tickets on a timer":
-1. [A runner that builds a ready ticket into a PR](0007-agent-runner.md): the runner, run by hand. **Blocks this one.**
+1. [A runner that builds a ready ticket into a PR](../features/0007-agent-runner.md): the runner, run by hand. **Blocks this one.**
 2. **This one:** the review step.
 3. [Start the runner on a timer](agent-timer.md): blocked by both.
 
@@ -150,7 +150,7 @@ The first real round is part 3's real run, on ticket 0004. Part 1's real run by 
 
 ## Readiness review
 
-Split on 2026-11-19 from "An agent that builds ready tickets on a timer", after its review round 2. That doc's two review rounds covered this part's design too; their record is in [agent-runner.md](0007-agent-runner.md#readiness-review). This part hasn't been reviewed on its own yet, and its Definition of Ready hasn't been checked on its own: that's its next refinement, after part 1.
+Split on 2026-11-19 from "An agent that builds ready tickets on a timer", after its review round 2. That doc's two review rounds covered this part's design too; their record is in [the runner's ticket](../tickets/0007-agent-runner.md#readiness-review). This part hasn't been reviewed on its own yet, and its Definition of Ready hasn't been checked on its own: that's its next refinement, after part 1.
 
 Answered questions that apply here (see part 1's record): Q1 (the App, so the runner's comments are told apart by author), Q2 (a round on every commit Qodo reviews), Q4 (a workflow change stops with `needs-help`), Q6 and Q7 (the agent's limits).
 

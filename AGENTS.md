@@ -14,6 +14,7 @@ Instructions for AI agents and reviewers working in this repository. People are 
 | `docs/tickets/` | The history: one doc per built ticket, frozen once its PR merges. Index: [`docs/tickets/README.md`](docs/tickets/README.md). |
 | `docs/backlog/README.md` | The ticket system: work not built yet. New requests and known gaps go here. See [Backlog tickets](#backlog-tickets). |
 | `scripts/ticket.sh` | Lists the ready tickets and claims one. |
+| `scripts/agent-run.sh` | The runner: builds the next ready ticket into a PR, as the App `jd-cookie-agent[bot]`. Spec: [`docs/features/0007-agent-runner.md`](docs/features/0007-agent-runner.md). Its tests: `npm run test:scripts`. |
 | `.agents/skills/` | Agent skills: `next-ticket`, `refine-ticket`, and `grilling`. `.claude/skills` is a symlink to it. See [Skills](#skills). |
 | `.github/workflows/` | CI (`ci.yml`), the PR title check (`pr-title.yml`), and releases (`release-please.yml`). |
 | `STATUS.md` | A handoff note between working sessions: where the work stands. Not a rules file. |

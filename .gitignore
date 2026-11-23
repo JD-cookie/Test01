@@ -3,3 +3,7 @@ server/data/
 .env
 *.swp
 *.swo
+# The runner's agent writes its files here, in the runner's own clone.
+.agent/
+# Private keys, such as the runner's App key, never belong in the repo.
+*.pem
