@@ -1,6 +1,6 @@
 # A runner that builds a ready ticket into a PR
 
-Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNNN-agent-runner.md`. In the PR that builds it, it moves to `docs/tickets/`, and the runner's spec goes to `docs/features/NNNN-agent-runner.md`, with the same number (ticket 0006's layout). Parts 2 and 3 edit that spec doc in place. The slug names the capability, not this first part, since a spec doc is never renamed (renamed from `agent-build` on 2026-11-20, at the user's choice).
+Status: **ready**, 2026-11-22, as ticket 0007. In the PR that builds it, it moves to `docs/tickets/`, and the runner's spec goes to `docs/features/0007-agent-runner.md`, with the same number (ticket 0006's layout). Parts 2 and 3 edit that spec doc in place. The slug names the capability, not this first part, since a spec doc is never renamed (renamed from `agent-build` on 2026-11-20, at the user's choice).
 
 This is part 1 of 3, split on 2026-11-19 from "An agent that builds ready tickets on a timer", which was too big for one PR (Definition of Ready, item 4):
 1. **This one:** the runner, run by hand, claims a `ready` ticket, builds it, gets the checks green, and opens the PR as the App.
@@ -212,7 +212,7 @@ Each run writes a log to `${XDG_STATE_HOME:-$HOME/.local/state}/jd-cookie-agent/
 - `.github/workflows/ci.yml`: a third job, `scripts`, on `ubuntu-24.04`, following rule 5 like the other two: checkout, `setup-node` with Node 24 and the npm cache, `npm ci` at the root (the tests run the real commitlint, a root dev dependency, as `pr-title.yml` installs it), then `npm run test:scripts`. CI doesn't run the root `check` today: its jobs run the server's and the app's.
 - `.husky/pre-commit`: `scripts` becomes a third part beside `server` and `app`. When `scripts/` has staged changes, it needs the root `node_modules` (or says to run `npm install` at the root, as it does for the others), links it into the snapshot, and runs `npm run test:scripts` there, on the staged content.
 - `.gitignore`: `.agent/`, and `*.pem`, which the user added in their checkout on 2026-11-19, so no App key in a working tree is committed.
-- `docs/features/NNNN-agent-runner.md` (new): the runner's spec, from this doc's spec sections as built (ticket 0006's build step 3), with a Features row in `docs/README.md` and a Changes section. Parts 2 and 3 edit it in place.
+- `docs/features/0007-agent-runner.md` (new): the runner's spec, from this doc's spec sections as built (ticket 0006's build step 3), with a Features row in `docs/README.md` and a Changes section. Parts 2 and 3 edit it in place.
 - `docs/devops.md`: a short section on operating the runner: what it does, checking the setup, running it, following a run, and what `needs-help` means, linking the spec doc for the rest.
 - `AGENTS.md`: a line in the table for the runner.
 
@@ -379,10 +379,11 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5), as the whole of "An agent t
   - Codex: `claim next` takes the first ready ticket in the table's order, so check 9 would claim 0004. Fixed: task 5 puts the second ticket's row above 0004's, and checks `ticket.sh list` first.
 - **After ticket 0006 was marked ready** (2026-11-20, the user's review request): the three parts were checked against 0006's layout (a living spec in `docs/features/`, frozen ticket docs in `docs/tickets/`), and changed to fit it:
   - this part is blocked by 0006, so it's built under the new layout
-  - its spec becomes `docs/features/NNNN-agent-runner.md`, which parts 2 and 3 edit in place, with a short operating section in `docs/devops.md` (the user's choice, over `docs/devops.md` only)
+  - its spec becomes `docs/features/0007-agent-runner.md`, which parts 2 and 3 edit in place, with a short operating section in `docs/devops.md` (the user's choice, over `docs/devops.md` only)
   - renamed from `agent-build` to `agent-runner`, since a spec doc is never renamed and this one covers all three parts (the user's choice)
   - each real run is recorded in the doc of the ticket it built, in that ticket's PR, since this ticket's doc is frozen once its PR merges: this replaces round 2's "follow-up docs PR" fix
-- **Approved by the user** (2026-11-22): the design is ready, but it stays `designed` until ticket 0006, which blocks it, is built (`refine-ticket` step 8). It's marked `ready` then, in its own PR. The idea row "Mark a blocked ticket `ready` before its blockers are built" would make that second step unneeded.
+- **Approved by the user** (2026-11-22): the design is ready, but it stays `designed` until ticket 0006, which blocks it, is built (`refine-ticket` step 8). It's marked `ready` then, in its own PR.
+- **Marked ready** (2026-11-22, the user's yes to "Mark it ready?", after ticket 0006 was built in PR #18): ticket 0007, the next free number by step 9.1. 0005, which `ready-0005` held while this was refined, was never used on `main`, and 0006 is now the highest used. Step 9.1's "Blocked by" check passed: 0006's row is gone, and it's in `docs/tickets/README.md`. The idea row "Mark a blocked ticket `ready` before its blockers are built" would make that second step unneeded.
 - **Claude's usage limit** (2026-11-22, the user's question): a 5-hour or weekly limit would have failed all 3 tries in seconds, with a stop that blamed the checks. Added: the runner recognizes the limit, stops for help at once with the reset time, and has a test (check 3). The text `claude -p` prints at a limit isn't probed. Waiting for the reset without the user is a later backlog item (the user's choice, over doing it in this part).
 
 ## Decisions made for this ticket
