@@ -10,7 +10,8 @@ Instructions for AI agents and reviewers working in this repository. People are 
 |---|---|
 | `app/` | The mobile app: Expo SDK 58, Expo Router, TypeScript. **Expo-specific instructions are in [`app/AGENTS.md`](app/AGENTS.md).** |
 | `server/` | The API: Fastify 5, `node:sqlite` in development and tests, optional Valkey for shared counters. TypeScript run directly by Node (type stripping), so only erasable syntax. |
-| `docs/` | The system spec, one doc per feature. Start at [`docs/README.md`](docs/README.md). Environments, config, CI, and releases: [`docs/devops.md`](docs/devops.md). |
+| `docs/` | The system spec, one doc per feature in `docs/features/`. Start at [`docs/README.md`](docs/README.md). Environments, config, CI, and releases: [`docs/devops.md`](docs/devops.md). |
+| `docs/tickets/` | The history: one doc per built ticket, frozen once its PR merges. Index: [`docs/tickets/README.md`](docs/tickets/README.md). |
 | `docs/backlog/README.md` | The ticket system: work not built yet. New requests and known gaps go here. See [Backlog tickets](#backlog-tickets). |
 | `scripts/ticket.sh` | Lists the ready tickets and claims one. |
 | `.agents/skills/` | Agent skills: `next-ticket`, `refine-ticket`, and `grilling`. `.claude/skills` is a symlink to it. See [Skills](#skills). |
@@ -67,11 +68,13 @@ Each rule says where it applies and why it exists. Reviewers should flag changes
 
 ### 3. Every Feature Ships With Its Doc
 
-**Rule:** a PR that adds or changes behavior updates the spec in the same PR: `docs/features/NNNN-<slug>.md` for a feature, `docs/devops.md` for environments, config, CI, or releases. A feature's number is four digits, zero-padded (`0001`), given when its ticket is marked `ready` in the backlog, and its branch is named after the doc (`NNNN-<slug>`). The docs must hold enough detail to rebuild the system from them alone. When a feature built from the backlog is done, its row leaves `docs/backlog/README.md`.
+**Rule:** a PR that adds or changes behavior updates the spec in the same PR. The spec docs are `docs/README.md`, `docs/devops.md` (environments, config, CI, or releases), and `docs/features/NNNN-<slug>.md`, one per capability, each updated in place by every change to that behavior. A new capability's doc has the number of the ticket that adds it, four digits, zero-padded (`0001`), given when its ticket is marked `ready` in the backlog, and the ticket's branch is named `NNNN-<slug>`. The docs must hold enough detail to rebuild the system from them alone. Also:
+- A built ticket's doc moves from `docs/backlog/` to `docs/tickets/`, with stable links (see "Writing a feature doc" in `docs/README.md`), and is **frozen** once its PR merges. Its row leaves `docs/backlog/README.md`.
+- A spec doc is **never renamed or deleted** once the PR that adds it has merged. A design doc in `docs/backlog/` can be renamed until then. A removed capability's doc becomes a stub.
 
-**Applies to:** every PR that touches `app/`, `server/`, or `.github/`. Docs-only, test-only, and release PRs are exempt.
+**Applies to:** the spec update, every PR that touches `app/`, `server/`, or `.github/`. Docs-only, test-only, and release PRs are exempt from it. The other rules here (a built ticket's doc moves to `docs/tickets/` with stable links and is frozen, and spec docs keep their names) hold for every PR, docs-only ones included, since those are the likeliest to rename a spec doc or edit a frozen ticket doc.
 
-**Why:** the docs are the spec of the system, not a description written afterwards. Docs written later drift from the code, and a later rebuild, or the next agent, can't trust them.
+**Why:** the docs are the spec of the system, not a description written afterwards. Docs written later drift from the code, and a later rebuild, or the next agent, can't trust them. Keeping each spec doc current, with the history in ticket docs, gives one place that says what the system does now. Links to spec docs come from frozen ticket docs and from release-please's changelogs, which can't be edited (rule 4), so spec docs keep their names.
 
 ### 4. Release Tooling Owns Versions and Changelogs
 
@@ -106,7 +109,7 @@ Work comes from [`docs/backlog/README.md`](docs/backlog/README.md), which define
   - The claim is the ticket's branch on `origin`, named `NNNN-<slug>`. The script creates it with a unique claim commit, pushes it create-only, and checks that `origin` has that commit. Only one agent can win, and no merge is needed.
   - If another agent wins a ticket first, `claim next` moves on to the next one. Exit code 3 means no free ticket is left.
   - Never delete, overwrite, or force-push another agent's branch. Only the user releases a claim.
-- **One ticket per branch and PR.** The PR moves the design doc to `docs/features/` and fills in its "Delivery and review" section. It also deletes the ticket's row and adds the feature to `docs/README.md`.
+- **One ticket per branch and PR.** The PR moves the design doc to `docs/tickets/` and fills in its "Delivery and review" section. It writes or edits the spec docs it changes, each with a line in its Changes list, adds the ticket to `docs/tickets/README.md`, and deletes the ticket's row. A new capability's spec doc also goes in the Features table of `docs/README.md`.
 
 Building a ticket is the `next-ticket` skill: [`.agents/skills/next-ticket/SKILL.md`](.agents/skills/next-ticket/SKILL.md). See [Skills](#skills) for where agents find it.
 

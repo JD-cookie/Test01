@@ -187,3 +187,8 @@ This feature has no settings of its own. The settings for the server (`PORT`, `H
 5. Log in with the wrong password, then with an unknown email. Both show exactly "Incorrect email or password."
 6. Log in on two devices, then log out on one. The other stays logged in.
 7. Stop the server and reopen the app while logged in. It still opens on Home. Logging in while the server is stopped shows the "Can't reach the server…" message.
+
+## Changes
+
+- Built before the backlog, in commit d5f3a9a. Its history is in git.
+- 0006: Keep the spec separate from the ticket history ([ticket](../tickets/0006-spec-and-tickets.md))

@@ -1,6 +1,6 @@
 # Delete expired session rows
 
-Status: **ready**, 2026-11-18, as ticket 0004. It moves to `docs/features/` in the PR that builds it.
+Status: **ready**, 2026-11-18, as ticket 0004. It moves to `docs/tickets/` in the PR that builds it, which edits the spec docs `docs/features/0001-accounts.md` and `docs/devops.md` in place (ticket 0006's layout).
 
 ## Summary
 

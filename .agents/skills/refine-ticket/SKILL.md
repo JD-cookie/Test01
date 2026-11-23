@@ -7,7 +7,7 @@ description: Get an item in this repo's backlog (docs/backlog/README.md) ready t
 
 The backlog is `docs/backlog/README.md`. This skill takes one `idea` or `designed` item and works on its design doc until it meets the backlog's **Definition of Ready**, then asks the user to approve it. Only with the user's yes, in this conversation, does it mark the item `ready`, in a PR the user merges.
 
-The design behind this skill, and the reasons for each step, are in `docs/features/0003-refine-ticket-skill.md`.
+The design behind this skill is its spec doc, `docs/features/0003-refine-ticket-skill.md`. The reasons for each step are in the ticket docs its Changes list links, in `docs/tickets/`.
 
 Two rules hold throughout:
 - **Facts are yours, decisions are the user's.** Anything you can find by reading the repo, the docs, the code, or git history, or by running something, you find yourself. Never ask the user for a fact. Ask only about product and preference choices, and never guess at one that changes the scope or the behavior.
@@ -31,13 +31,13 @@ In a few sentences, in your own words: who it's for, what problem it solves, and
 
 ## 3. Check that the work is needed
 
-- **Already built?** Search the code and `docs/features/` by concept, not only by the item's wording. Report where you looked.
+- **Already built?** Search the code, `docs/features/` (the spec), and `docs/tickets/` (built tickets) by concept, not only by the item's wording. Report where you looked.
 - **Overlaps or conflicts?** Look for another backlog item, or an open PR (`gh pr list`), that covers the same ground or contradicts it.
 - **Dropped before?** Look in the backlog's history for a dropped item like it: `git log -p --follow -- docs/backlog/README.md`, and search the commit messages, which say why an item was dropped.
 
 If any of these turns up something, report it with where, and ask the user whether to go on.
 
-**No design doc yet?** Once the work is needed, write a first draft at `docs/backlog/<slug>.md`, with the feature doc sections ("Writing a feature doc" in `docs/README.md`). Fill in what's known, and mark what isn't as open. Link the row's title to it, and set the row to `designed`.
+**No design doc yet?** Once the work is needed, write a first draft at `docs/backlog/<slug>.md`, with a ticket doc's sections ("Writing a feature doc" in `docs/README.md`). Fill in what's known, and mark what isn't as open. Link the row's title to it, and set the row to `designed`.
 
 ## 4. Check the Definition of Ready
 
@@ -136,14 +136,28 @@ In the commands below, `$title` is the item's title exactly as it is in its row 
 
 The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`), never a dollar sign and the column number. When Claude Code loads a skill with arguments, it replaces each `$` followed by a digit with a word of the arguments, even inside code.
 
-1. **Check the item and find the next free number.** On a fresh `origin/main`, the item's row must still have no number and not be `ready`. If it has one, someone else marked it ready: stop and tell the user. If its Notes start with "Blocked by: …", each item named there must be built: its row is gone from the backlog, and it's in the Features table of `docs/README.md`. If one isn't, stop and tell the user: a blocked item isn't marked ready until what blocks it is built. The number must be unused on `main` and in every ticket and reservation branch on `origin`:
+1. **Check the item and find the next free number.** On a fresh `origin/main`, the item's row must still have no number and not be `ready`. If it has one, someone else marked it ready: stop and tell the user. If its Notes start with "Blocked by: …", each item named there must be built: its row is gone from the backlog, and it's listed in `docs/tickets/README.md`, or, for features built before the backlog (0001 and 0002), in the Features table of `docs/README.md`. Run this for each title named there, set as `b`; it prints nothing for a built item:
+
+   ```sh
+   b='<a title from "Blocked by">' &&
+   git fetch -q origin &&
+   backlog=$(git show origin/main:docs/backlog/README.md) &&
+   built=$(git show origin/main:docs/tickets/README.md && git show origin/main:docs/README.md) &&
+   if printf '%s\n' "$backlog" | awk -F'|' -v c=3 -v t="$b" '{ x = $c; gsub(/^ +| +$/, "", x) } x == t || index(x, "[" t "](") == 1' | grep -q .; then
+     echo "not built: $b (its row is still in the backlog)"
+   elif ! printf '%s\n' "$built" | grep -qF "| [$b]("; then
+     echo "not built: $b (not in docs/tickets/README.md or the Features table)"
+   fi
+   ```
+
+   If it prints `not built`, stop and tell the user: a blocked item isn't marked ready until what blocks it is built. The number must be unused on `main`, in `docs/features/` and `docs/tickets/`, and in every ticket and reservation branch on `origin`:
 
    ```sh
    git fetch -q origin &&
    heads=$(git ls-remote --heads origin) &&
    max=$({
      git show origin/main:docs/backlog/README.md | awk -F'|' -v c=2 '$c ~ /^ *[0-9][0-9][0-9][0-9] *$/ { print $c }'
-     git ls-tree -r --name-only origin/main docs/features/ | sed -nE 's#.*/([0-9]{4})-.*#\1#p'
+     git ls-tree -r --name-only origin/main docs/features/ docs/tickets/ | sed -nE 's#.*/([0-9]{4})-.*#\1#p'
      printf '%s\n' "$heads" | sed -nE 's#.*refs/heads/(ready-)?([0-9]{4})(-.*)?$#\2#p'
    } | tr -d ' ' | sort -n | tail -1) &&
    n=$(printf '%04d' "$(expr "${max:-0}" + 1)") && echo "$n"
@@ -153,7 +167,7 @@ The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`)
    - `git mv "docs/backlog/$slug.md" "docs/backlog/$n-$slug.md"`
    - in the doc, set its status line to `ready`, with the date
    - in the row: the number in the `#` column, the new link, and the status `ready`
-   - fix any other links to the old path (`grep -rn "$slug.md" docs AGENTS.md .agents`)
+   - fix any other links to the old path, outside `docs/tickets/` only (`grep -rn "$slug.md" docs AGENTS.md .agents --exclude-dir=tickets`): frozen ticket docs link a backlog doc by permalink, which keeps working
    - one commit, `docs(repo): mark <title> ready as ticket NNNN`
 4. **Reserve the number.** Push create-only, and check that `origin` has *your* commit:
 
@@ -168,7 +182,7 @@ The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`)
    ```sh
    git fetch -q origin &&
    { git show origin/main:docs/backlog/README.md | awk -F'|' -v c=2 -v n="$n" '{ gsub(/ /, "", $c) } $c == n'
-     git ls-tree -r --name-only origin/main docs/features/ | grep "/$n-"; } | grep -q . && echo "taken on main"
+     git ls-tree -r --name-only origin/main docs/features/ docs/tickets/ | grep "/$n-"; } | grep -q . && echo "taken on main"
    ```
 
    If it prints `taken on main`, delete your own reservation (`git push origin --delete "ready-$n"`: it holds your commit, as step 4 checked), undo the ready commit, and go back to 1. Once your branch exists, no other refinement can take `$n`, and a later merge of `$n` can only come from your PR, so this check doesn't need repeating.
