@@ -36,11 +36,13 @@ What the exit codes mean:
 Read the ticket's design doc, `docs/backlog/NNNN-slug.md`, all of it. Its acceptance checks define what "done" means. Also follow `AGENTS.md`: its rules apply to every ticket.
 
 - If the design doc turns out to be wrong or incomplete, don't guess at something big. Ask the user. Small gaps can be decided and written down in the doc.
-- In the same branch:
-  1. Move the design doc to `docs/features/NNNN-slug.md` (`git mv`) and update it to match what was built, including the implementation map.
-  2. Add the feature to the Features table in `docs/README.md`.
-  3. Delete the ticket's row from `docs/backlog/README.md`. That also removes the claim status.
-  4. Fix any links to the old path. Operational changes also go in `docs/devops.md`.
+- In the same branch, follow "Building it" in `docs/backlog/README.md`. The spec docs (`docs/README.md`, `docs/devops.md`, `docs/features/`) say what the system does now, and the ticket's doc becomes its history, in `docs/tickets/` ("Writing a feature doc" in `docs/README.md`):
+  1. **The ticket doc:** `git mv docs/backlog/NNNN-slug.md docs/tickets/NNNN-slug.md`, and update its spec sections, including the implementation map, to match what was built. Its status line says built, with the date, followed by a **Spec docs changed** line linking each spec doc it changed.
+  2. **Make its links stable:** links to spec docs by file only, with no `#…`; links to other docs in `docs/tickets/` as they are; anything else on `main` as a GitHub permalink; a file this PR adds as plain text (see "Stable links" in `docs/README.md`).
+  3. **The spec:** for a new capability, write `docs/features/NNNN-slug.md`, with the ticket's number, and add it to the Features table in `docs/README.md`. For a change to an existing capability, edit its spec doc in place. Operational changes go in `docs/devops.md`. Never rename or delete a spec doc once the PR that added it has merged.
+  4. **Changes lists:** a line for this ticket at the end of each changed spec doc's **Changes** section.
+  5. **The index:** a row in `docs/tickets/README.md`, with the PR number added in a commit once the PR is open.
+  6. Delete the ticket's row from `docs/backlog/README.md`, which also removes the claim status, and fix links to the old path everywhere outside `docs/tickets/`. Never edit a ticket doc in `docs/tickets/` whose PR has merged.
 - Commit with Conventional Commits messages, and let the hooks run.
 - Run `npm run check` before pushing. Run the Valkey tests too if the change touches rate limiting.
 
@@ -48,7 +50,7 @@ Read the ticket's design doc, `docs/backlog/NNNN-slug.md`, all of it. Its accept
 
 - **Title:** a Conventional Commits title. The type and scope should match the change, e.g. `feat(server): delete expired session rows`. Use `!` for breaking changes.
 - **Body:**
-  - Start with `Ticket: NNNN-slug (docs/features/NNNN-slug.md)`.
+  - Start with `Ticket: NNNN-slug (docs/tickets/NNNN-slug.md)`.
   - Then what was built.
   - Then each acceptance check and how it was verified.
   - End with the attribution line.

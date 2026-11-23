@@ -136,3 +136,8 @@ VALKEY_URL=redis://127.0.0.1:6379/0 npm run dev
 10. Without `TRUST_PROXY`, changing `X-Forwarded-For` doesn't change the client. With `TRUST_PROXY` set to the proxy's address, it does.
 11. With the store failing on every call, signup and login behave as if there were no limits.
 12. With Valkey: the counts are shared between server processes, and each key expires when its window ends. With Valkey stopped: logins still work, respond quickly, and an error is logged for each request.
+
+## Changes
+
+- Built before the backlog, in PR #1. Its history is in git.
+- 0006: Keep the spec separate from the ticket history ([ticket](../tickets/0006-spec-and-tickets.md))

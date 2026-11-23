@@ -1,6 +1,8 @@
 # Keep the spec separate from the ticket history
 
-Status: **ready**, 2026-11-20, as ticket 0006. It moves to `docs/tickets/` in the PR that builds it, the first to follow the layout it sets up.
+Status: **built**, 2026-11-22, ticket 0006, the first ticket built in the layout it sets up. Marked ready on 2026-11-20 in PR #15.
+
+Spec docs changed: [docs/README.md](../README.md), [docs/devops.md](../devops.md), [0001-accounts.md](../features/0001-accounts.md), [0002-rate-limiting.md](../features/0002-rate-limiting.md), [0003-refine-ticket-skill.md](../features/0003-refine-ticket-skill.md).
 
 ## Summary
 
@@ -77,7 +79,7 @@ refine-ticket step 3 searches the code, `docs/features/`, and `docs/tickets/`.
 - **Features 0001 and 0002:** each gets a Changes section, with a first line saying it was built before the backlog (0001 in commit d5f3a9a, 0002 in PR #1), then a line for this ticket. They get no ticket docs.
 - **`docs/README.md` and `docs/devops.md`:** a Changes section each. `docs/README.md`'s has a line for 0003, which changed its item 9 of "Writing a feature doc" (`0003-refine-ticket-skill.md`'s implementation map), and one for this ticket. `docs/devops.md`'s has a first line saying changes before this ticket aren't listed (git has them), and one for this ticket.
 - **The index**, `docs/tickets/README.md` (new), with a line saying what the folder holds, and rows for 0003 (PR #10) and this ticket.
-- **Status lines** of the docs still in `docs/backlog/` that say "It moves to `docs/features/` in the PR that builds it": 0004, `server-container-image.md`, and the runner's three parts if PR #13 (now #17) has merged by then (if it hasn't, PR #13 (now #17) is updated instead). Each says it moves to `docs/tickets/`, and which spec docs it changes where that's known (0004: `0001-accounts.md` and `docs/devops.md`).
+- **Status lines** of the docs still in `docs/backlog/` that said "It moves to `docs/features/` in the PR that builds it": 0004 and `server-container-image.md`. Each says it moves to `docs/tickets/`, and which spec docs it changes (0004: `0001-accounts.md` and `docs/devops.md`; the container image: `docs/devops.md`). The runner's three parts already said so: PR #17, which merged first, was fitted to this layout.
 - **This ticket's own doc** goes to `docs/tickets/0006-spec-and-tickets.md`. It's a change to how the docs work, not a capability of the system, so it adds no file to `docs/features/`. Its Spec docs changed line lists `docs/README.md`, `docs/devops.md`, `0001-accounts.md`, `0002-rate-limiting.md`, and `0003-refine-ticket-skill.md`, and each of those five gets its line in Changes.
 
 ### Tickets built under the old layout
@@ -109,7 +111,7 @@ Failure modes: a ticket PR that forgets the spec update leaves the spec stale. A
 
 ## Acceptance checks
 
-Checks 1 to 6 are run by the builder, in this PR, with their commands and output in "Delivery and review".
+Checks 1 to 6 are run by the builder, in this PR, with their commands and output in "Delivery and review". The scripts named here were kept in a scratch directory, not committed.
 
 1. **Numbers and blockers:** in a scratch clone with a local bare `origin`:
    - with `docs/tickets/0007-x.md` on `main` and nothing higher anywhere else, refine-ticket step 9.1's command prints `0008`, and step 9.5's check prints `taken on main` for `0007`

@@ -260,3 +260,8 @@ Deploy the server before the app because a new app may rely on new endpoints, wh
 - **iOS:** the variants already have bundle IDs, but there's no iOS build profile yet. Installing on an iPhone needs an Apple Developer account.
 - **Over-the-air updates** (EAS Update) aren't set up. Every app change needs a new APK.
 - **`app/.npmrc` sets `legacy-peer-deps=true`.** It works around a peer-dependency conflict in Expo SDK 58 between `react-dom` 19.3.1 and the pinned `react` 19.3.0. Remove it once the SDK moves to a newer `react`.
+
+## Changes
+
+- Changes before ticket 0006 aren't listed here: git has them.
+- 0006: Keep the spec separate from the ticket history ([ticket](tickets/0006-spec-and-tickets.md))
