@@ -249,7 +249,7 @@ Checks 1 to 6 are in `scripts/test/agent-run.test.sh`. It runs the runner agains
    - with the agent hiding an uncommitted change behind `assume-unchanged`: the try fails before the checks, and the fix prompt lists the file
    - with the agent replacing `.git/config` by a symlink: the runner's write replaces the link, and its target is unchanged; with `.agent` a symlink, its `pr.md` doesn't count
    - with output full of code fences: the description is escaped before it's cut, stays under 60,000 characters, and has only its own two fences
-   - with a check that adds a push URL and an `insteadOf` rewrite to `.git/config`: the push still reaches `origin`, and the sandbox mounts the clone's `.git` read-only
+   - with a check that adds a push URL and an `insteadOf` rewrite to `.git/config`: the push still reaches `origin`, and the sandbox mounts the clone's `.git` read-only; with a real `bwrap`, a write to `.git/config` inside the sandbox fails, and the rest of the clone is writable
    - with a hook left in the clone's `.husky/_` (ignored there by husky's own `.gitignore`) by an earlier ticket, the next claim's push doesn't run it
    - with the agent stub overwriting the filled settings file it was given, the next try's settings are filled again
    - with the agent stub adding an `insteadOf` rewrite and a push URL to a decoy repo, and an fsmonitor command, to the clone's `.git/config`: the push reaches `origin`, the decoy gets nothing, the fsmonitor command never runs, and the config is put back

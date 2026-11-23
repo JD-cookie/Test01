@@ -1014,6 +1014,11 @@ else
   (export PATH="$T/realbin:$T/bin:$ORIG_PATH"; cd "$repo" && "$runner" check) >"$T/out" 2>&1
   expect "the real bwrap: check's probes pass" bash -c "grep -q 'ok: bwrap hides a masked folder' '$T/out' && grep -q 'ok: bwrap has no network' '$T/out'"
   export PATH=$ORIG_PATH
+  # The clone's .git is read-only inside: a check can't write its config.
+  before=$(cat "$clone/.git/config")
+  expect "the real bwrap: .git/config can't be written inside" bash -c "! '$real_bwrap' \"\$@\" sh -c 'echo \"[x]\" >>.git/config' 2>/dev/null" _ "${sb[@]}"
+  expect "the real bwrap: .git/config is unchanged" [ "$(cat "$clone/.git/config")" = "$before" ]
+  expect "the real bwrap: the clone itself is writable inside" "$real_bwrap" "${sb[@]}" sh -c 'touch .sandbox-write-probe && rm .sandbox-write-probe'
   # A secret file can't be read inside, and a listener the test reached from outside can't be
   # reached from inside.
   echo secret >"$T/config/jd-cookie-agent/secret.txt"
