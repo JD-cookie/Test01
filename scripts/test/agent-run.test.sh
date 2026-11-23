@@ -151,6 +151,7 @@ printf '%s\n' "$*" >>"$STUB_T/calls/gh.args"
 printf '%s\n' "${GH_TOKEN:-}" >"$STUB_T/calls/gh.token"
 if [ -n "${STUB_CRED:-}" ]; then
   printf 'protocol=https\nhost=github.com\n\n' | git credential fill >"$STUB_T/calls/cred.out" 2>&1
+  printf 'protocol=https\nhost=evil.example\n\n' | GIT_TERMINAL_PROMPT=0 git credential fill >"$STUB_T/calls/cred-other.out" 2>&1
 fi
 method=GET paginate=no jqx= input= path= fields=()
 while [ $# -gt 0 ]; do
@@ -510,6 +511,14 @@ n=$(last_pr)
 expect "a bad title: the draft gets the fallback title" [ "$(pr_json "$n" | jq -r .title)" = 'chore(repo): build ticket 0042-thing' ]
 expect "a bad title: the fix prompt has commitlint's output" grep -q 'subject' "$T/calls/claude-2.prompt"
 
+# A good title, but no Ticket line in the body: a failed try, and the fix prompt says so.
+setup
+printf 'echo x >>src/file.txt && git commit -q -am "feat(server): x"\nprintf "feat(server): do a thing\\n\\nNo ticket line here.\\n" >.agent/pr.md\n' >"$T/agent/1"
+agent_commit 2 'feat(server): do a thing'
+run_runner
+expect "no Ticket line: try 1 failed, try 2 opened the PR" [ "$(claude_calls)/$(prs)" = "2/1" ]
+expect "no Ticket line: the fix prompt says so" grep -q 'must start with the line: Ticket: 0042-thing' "$T/calls/claude-2.prompt"
+
 # The agent's own commitlint config doesn't count: main's does, and the agent's isn't loaded.
 setup
 cat >"$T/agent/default" <<EOF
@@ -562,7 +571,7 @@ EOF
 chmod +x "$T/origin.git/hooks/pre-receive"
 cat >"$T/agent/default" <<'EOF'
 echo "on: push" >>.github/workflows/ci.yml && git commit -q -am "ci: change a workflow"
-printf 'ci: change a workflow\n' >.agent/pr.md
+printf 'ci: change a workflow\n\nTicket: 0042-thing (docs/tickets/0042-thing.md)\n' >.agent/pr.md
 EOF
 run_runner
 n=$(last_pr)
@@ -655,7 +664,7 @@ expect "the lock: exit 0 at once (${took}s)" [ "$rc/$((took < 5))" = "0/1" ]
 expect "the lock: says so" grep -q 'another run holds the lock' "$T/out"
 expect "the lock: no claude call" [ "$(claude_calls)" -eq 0 ]
 # An open PR, with or without needs-help: nothing happens.
-for labels in '[]' '[{"name":"needs-help"}]'; do
+for labels in '[{"name":"agent-run"}]' '[{"name":"agent-run"},{"name":"needs-help"}]'; do
   setup
   claim_branch "$AGENT"
   echo "[{\"number\":9,\"state\":\"open\",\"labels\":$labels,\"head\":{\"ref\":\"0042-thing\"}}]" >"$T/gh/pulls.json"
@@ -664,7 +673,53 @@ for labels in '[]' '[{"name":"needs-help"}]'; do
   expect "an open PR ($labels): logs PR #9 is open" grep -q 'PR #9 is open' "$T/out"
   expect "an open PR ($labels): no claude call, no PR, no comment" [ "$(claude_calls)/$(prs)/$(grep -c comments "$T/calls/gh.args")" = "0/0/0" ]
   expect "an open PR ($labels): no new claim" [ "$(git -C "$T/origin.git" for-each-ref)" = "$before" ]
+  expect "an open PR ($labels): its labels are left alone" [ ! -e "$T/calls/pr-9.labels" ]
 done
+# An open PR whose labels call failed (no labels): they're added back, needs-help only for a stop.
+for kind in stop build; do
+  setup
+  claim_branch "$AGENT"
+  body='Ticket: 0042-thing'; want='agent-run'
+  if [ "$kind" = stop ]; then body='**The runner stopped for help.**\n\nThe checks still fail after 3 tries.'; want='agent-run needs-help'; fi
+  printf '[{"number":9,"state":"open","labels":[],"body":"%s","head":{"ref":"0042-thing"}}]\n' "$body" >"$T/gh/pulls.json"
+  run_runner
+  expect "an open $kind PR with no labels: they're added back ($want)" [ "$(tr '\n' ' ' <"$T/calls/pr-9.labels" 2>/dev/null)" = "$want " ]
+  expect "an open $kind PR with no labels: no claude call, no new PR" [ "$(claude_calls)/$(prs)" = "0/0" ]
+done
+# A claim with no PR, whose branch on origin moved on while the clone stayed behind with an
+# uncommitted change: the saved work still restores the clone's tree.
+setup
+claim_branch "$AGENT"
+mkdir -p "$XDG_DATA_HOME/jd-cookie-agent"
+git clone -q "$T/origin.git" "$XDG_DATA_HOME/jd-cookie-agent/repo"
+clone=$XDG_DATA_HOME/jd-cookie-agent/repo
+git -C "$clone" switch -q 0042-thing
+echo "work in progress" >>"$clone/src/file.txt"
+echo "someone else" >"$T/claimer/src/other.txt"
+git -C "$T/claimer" add -A
+git -C "$T/claimer" -c user.name=x -c user.email=x@example.invalid commit -q -m "chore: move on"
+git -C "$T/claimer" push -q origin 0042-thing
+run_runner
+r=$(run_dir)
+expect "a branch that moved on: a draft PR with needs-help" [ "$(tr '\n' ' ' <"$T/calls/pr-$(last_pr).labels")" = "agent-run needs-help " ]
+restore "$r" "$T/restored"
+expect "a branch that moved on: restoring gives the clone's tree" [ "$(tree_of "$T/restored")" = "$(tree_of "$clone")" ]
+# A withdrawn ticket (claim exit 5) before any agent run: the draft doesn't reuse an old pr.md.
+setup
+w=$T/fakeseed
+git clone -q "$T/origin.git" "$w"
+printf '#!/bin/sh\ncase $1 in\n  list) echo "0042-thing  ready" ;;\n  claim) git switch -q -c 0042-thing && echo "ticket: the claim is yours, but on main 0042-thing is now designed, not ready." >&2 && exit 5 ;;\nesac\n' >"$w/scripts/ticket.sh"
+git -C "$w" -c user.name=x -c user.email=x@example.invalid commit -q -am "test: a ticket.sh that exits 5"
+git -C "$w" push -q origin main
+mkdir -p "$XDG_DATA_HOME/jd-cookie-agent"
+git clone -q "$T/origin.git" "$XDG_DATA_HOME/jd-cookie-agent/repo"
+mkdir -p "$XDG_DATA_HOME/jd-cookie-agent/repo/.agent"
+printf 'feat(server): an old ticket\n\nTicket: 0041-old\n' >"$XDG_DATA_HOME/jd-cookie-agent/repo/.agent/pr.md"
+run_runner
+n=$(last_pr)
+expect "a withdrawn ticket: a draft PR with the fallback title" [ "$(pr_json "$n" | jq -r .title)" = 'chore(repo): build ticket 0042-thing' ]
+expect "a withdrawn ticket: the old pr.md isn't in it" bash -c "! jq -r .body '$T/calls/pr-$n.json' | grep -q '0041-old'"
+expect "a withdrawn ticket: the reason is the claim's message" bash -c "jq -r .body '$T/calls/pr-$n.json' | grep -q 'now designed, not ready'"
 result 4 "crash, lock, and open PRs"
 
 # ---- 5. The token --------------------------------------------------------------------------
@@ -687,6 +742,7 @@ expect "the JWT's header" [ "$(b64d "$jh")" = '{"alg":"RS256","typ":"JWT"}' ]
 expect "the 520-character token reaches gh as GH_TOKEN" [ "$(cat "$T/calls/gh.token")" = "$FAKE_TOKEN" ]
 expect "the fake token has 520 characters" [ "${#FAKE_TOKEN}" -eq 520 ]
 expect "the credential helper answers with the token" bash -c "grep -qx 'username=x-access-token' '$T/calls/cred.out' && grep -qxF 'password=$FAKE_TOKEN' '$T/calls/cred.out'"
+expect "the credential helper gives nothing for another host" bash -c "! grep -q '^password=' '$T/calls/cred-other.out'"
 expect "the clone's .git/config has no credential.helper" bash -c "! grep -q credential '$clone/.git/config'"
 # A new token after the agent's run, before the push and the PR.
 expect "a new token after the agent ran, before the PR" bash -c "awk '/^claude/ { c = NR } /^token/ && c { t = NR } /^pr / { p = NR } END { exit !(c && t > c && p > t) }' '$T/calls/seq'"
@@ -758,6 +814,23 @@ done
 expect "npm run check and the title check ran through bwrap (3 calls: $sandboxed)" [ "$sandboxed" -eq 3 ]
 expect "npm run check ran only in the sandbox" [ "$(cat "$T/calls"/check-*.env | grep -c '^AGENT_RUN_IN_SANDBOX=1$')" -eq "$(check_calls)" ]
 expect "no pre-push hook ran on the runner's pushes" [ ! -e "$T/hook-ran" ]
+# The agent edits the clone's .git/config: an insteadOf rewrite and a push URL to a decoy, and
+# an fsmonitor command. The runner undoes them before its own git commands.
+setup
+git init -q --bare "$T/decoy.git"
+{
+  echo 'echo change >>src/file.txt && git commit -q -am "feat(server): change"'
+  echo "printf 'feat(server): do a thing\\n\\nTicket: 0042-thing (docs/tickets/0042-thing.md)\\n' >.agent/pr.md"
+  echo "git config url.'$T/decoy.git'.insteadOf '$T/origin.git'"
+  echo "git config remote.origin.pushurl '$T/decoy.git'"
+  echo "git config core.fsmonitor 'touch $T/fsmonitor-ran; false'"
+} >"$T/agent/default"
+run_runner
+expect "a tampered .git/config: the push went to origin" bash -c "git -C '$T/origin.git' log --format=%s 0042-thing | grep -q 'feat(server): change'"
+expect "a tampered .git/config: nothing reached the decoy" [ -z "$(git -C "$T/decoy.git" for-each-ref)" ]
+expect "a tampered .git/config: no fsmonitor command ran" [ ! -e "$T/fsmonitor-ran" ]
+expect "a tampered .git/config: it's put back" bash -c "! grep -qiE 'insteadOf|pushurl|fsmonitor' '$XDG_DATA_HOME/jd-cookie-agent/repo/.git/config'"
+
 # XDG_RUNTIME_DIR unset: exit 1 with its message, no claude call.
 setup
 agent_commit default 'feat(server): do a thing'

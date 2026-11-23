@@ -36,6 +36,8 @@ OUTPUT_LINES=200            # lines of a failed check's output given to the fix 
 KEEP_LOGS=200               # run logs kept
 LABEL_RUN=agent-run
 LABEL_HELP=needs-help
+# The first line of a stop's PR description, which find_work recognizes.
+STOP_MARK='**The runner stopped for help.**'
 DESC_MAX=60000              # GitHub's limit on a PR's description is 65,536 characters
 REASON_MAX=5000
 # Claude's usage limit, recognized only when claude also exits non-zero (case-insensitive,
@@ -89,23 +91,40 @@ new_token() {
   export GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=
   export GIT_CONFIG_KEY_1=credential.helper
   # shellcheck disable=SC2016 # expanded by the shell git starts for the helper, not here
-  export GIT_CONFIG_VALUE_1='!f() { echo username=x-access-token; echo "password=$GH_TOKEN"; }; f'
+  # It answers only "get" requests for https://github.com, the repo's host.
+  export GIT_CONFIG_VALUE_1='!f() { [ "$1" = get ] || exit 0; ok=; while read -r l && [ -n "$l" ]; do [ "$l" = host=github.com ] && ok=1; done; [ -n "$ok" ] && { echo username=x-access-token; echo "password=$GH_TOKEN"; }; }; f'
+}
+
+# Removes the token and the credential helper from the runner's environment, so nothing runs
+# with them until the next new_token.
+drop_token() {
+  unset GH_TOKEN GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0 GIT_CONFIG_KEY_1 GIT_CONFIG_VALUE_1
 }
 
 # gh, always against this repo's API. Logs the call (never the token) and its exit code.
 gh_api() {
   local rc=0
   gh api "$@" || rc=$?
-  [ "$rc" -eq 0 ] || log "gh api $1: exit $rc"
+  # To stderr, so a caller's $(…) doesn't swallow it. The arguments hold no secrets.
+  [ "$rc" -eq 0 ] || log "gh api $*: exit $rc" >&2
   return "$rc"
 }
 
-git_c() { git -C "$clone" "$@"; }
+# The runner's own git commands in the clone. The agent can edit .git/config, so they run no
+# hooks and no fsmonitor, and the config itself is put back after each agent run (save_config).
+git_c() { git -C "$clone" -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
+
+# The clone's .git/config as the runner left it, kept outside the clone. save_config takes the
+# copy; restore_config puts it back, undoing anything the agent changed there (an insteadOf
+# rewrite, a push URL, a hook path, an include).
+config_copy=$data/clone-config
+save_config() { cp "$clone/.git/config" "$config_copy"; }
+restore_config() { [ ! -f "$config_copy" ] || cp "$config_copy" "$clone/.git/config"; }
 
 # Pushes HEAD to the branch $1 without hooks: the agent can edit .husky/, and a hook it added
 # would run while the token is in the environment. Prints git's output. Exit code is git's.
 push_branch() {
-  git -C "$clone" -c core.hooksPath=/dev/null push -q origin "HEAD:refs/heads/$1" 2>&1
+  git_c push -q origin "HEAD:refs/heads/$1" 2>&1
 }
 
 # Fills a template's {{NAME}} placeholders. Arguments: template, destination, then NAME and a
@@ -300,6 +319,10 @@ checks() {
     echo "The agent didn't write .agent/pr.md, or its first line (the PR's title) is empty." >"$out"
     return 1
   fi
+  if ! tail -n +2 "$clone/.agent/pr.md" | grep -v '^[[:space:]]*$' | head -n 1 | grep -qF "Ticket: $ticket ("; then
+    echo "The PR body in .agent/pr.md (after the title) must start with the line: Ticket: $ticket (docs/tickets/$ticket.md), as next-ticket step 3 says." >"$out"
+    return 1
+  fi
   log "checking the PR's title with commitlint"
   if ! title_check "$(first_line "$clone/.agent/pr.md")" "$out.title"; then
     { echo "The PR title in .agent/pr.md fails commitlint, with main's config:"; cat "$out.title"; } >"$out"
@@ -329,11 +352,14 @@ stop_for_help() {
   local branch=$1 reason=$2 output=${3:-} refused=${4:-}
   mkdir -p "$run"
   log "stopping for help: $(head -n 1 "$reason")"
-  # Make sure any old .agent/ files don't count as this run's, except pr.md for the title.
   new_token
   git_c fetch -q origin || fail "couldn't fetch origin"
   local base saved=()
-  if base=$(git_c rev-parse -q --verify "refs/remotes/origin/$branch"); then :; else
+  # The newest commit both HEAD and origin's branch have, so the bundle (if any) and the patch
+  # rebuild HEAD exactly, even if origin's branch moved on while HEAD stayed behind.
+  if git_c rev-parse -q --verify "refs/remotes/origin/$branch" >/dev/null; then
+    base=$(git_c merge-base HEAD "origin/$branch")
+  else
     base=$(git_c merge-base HEAD origin/main)
   fi
   echo "$base" >"$run/base.txt"
@@ -379,12 +405,12 @@ stop_for_help() {
   [ -n "$output" ] && [ -f "$output" ] || output=/dev/null
   node -e '
     const fs = require("fs");
-    const [reasonF, outputF, bodyF, noteF, runDir, saved, max, reasonMax, out] = process.argv.slice(1);
+    const [reasonF, outputF, bodyF, noteF, runDir, saved, max, reasonMax, out, stopMark] = process.argv.slice(1);
     const cutEnd = (s, n) => s.length <= n ? s : s.slice(0, n) + "\n\n(cut to " + n + " characters; the whole text is in the run folder)";
     const cutStart = (s, n) => s.length <= n ? s : "(the first " + (s.length - n) + " characters are cut; the whole text is in the run folder)\n" + s.slice(s.length - n);
     const reason = cutEnd(fs.readFileSync(reasonF, "utf8").trim(), +reasonMax);
     const note = fs.readFileSync(noteF, "utf8").trim();
-    let head = "**The runner stopped for help.**\n\n" + reason + "\n\n" +
+    let head = stopMark + "\n\n" + reason + "\n\n" +
       (note ? note + "\n\n" : "") +
       "Run folder: `" + runDir + "`, with " + saved.split(" ").map(f => "`" + f + "`").join(", ") +
       ". To restore the work in a fresh clone: check out the commit in `base.txt`; if `commits.bundle` is there, `git fetch <run folder>/commits.bundle HEAD` and `git checkout FETCH_HEAD`; if `uncommitted.patch` is there, `git apply` it.\n\n" +
@@ -407,7 +433,7 @@ stop_for_help() {
     const text = compose(o, b);
     if (text.length >= +max) throw new Error("the description is still too long: " + text.length);
     fs.writeFileSync(out, text);
-  ' "$reason" "$output" "$pr_body" "$run/push-note.txt" "$run" "${saved[*]}" "$DESC_MAX" "$REASON_MAX" "$body_file"
+  ' "$reason" "$output" "$pr_body" "$run/push-note.txt" "$run" "${saved[*]}" "$DESC_MAX" "$REASON_MAX" "$body_file" "$STOP_MARK"
   open_pr "$branch" "$title_file" "$body_file" true "$LABEL_RUN" "$LABEL_HELP"
   exit 0
 }
@@ -428,6 +454,7 @@ ensure_clone() {
     log "cloning $origin_url into $clone"
     git clone -q "$origin_url" "$clone" || fail "cloning failed"
   fi
+  restore_config
   git_c remote set-url origin "$origin_url"
   # .agent/ is ignored by the repo's .gitignore too; this keeps it ignored whatever the branch says.
   grep -qxF '.agent/' "$clone/.git/info/exclude" 2>/dev/null || echo '.agent/' >>"$clone/.git/info/exclude"
@@ -444,10 +471,25 @@ find_work() {
     [ -n "$claim" ] || continue
     who=$(git_c log -1 --format='%(trailers:key=Claimed-By,valueonly)' "$claim" | tr -d '[:space:]')
     [ "$who" = "$agent" ] || continue
+    # Each line: number, state, whether it has agent-run, whether its description is a stop.
     prs=$(gh_api --paginate "repos/$OWNER/$REPO/pulls?state=all&head=$OWNER:$b&per_page=100" \
-      --jq '.[] | "\(.number) \(.state)"') || fail "couldn't list the PRs of $b"
-    if printf '%s\n' "$prs" | awk '$2 == "open"' | grep -q .; then
-      log "PR #$(printf '%s\n' "$prs" | awk '$2 == "open" { print $1; exit }') is open"
+      --jq ".[] | \"\\(.number) \\(.state) \\([.labels[]?.name] | index(\"$LABEL_RUN\") != null) \\((.body // \"\") | startswith(\"$STOP_MARK\"))\"") ||
+      fail "couldn't list the PRs of $b"
+    local open
+    if open=$(printf '%s\n' "$prs" | awk '$2 == "open" { print; exit }') && [ -n "$open" ]; then
+      local n has_label stopped
+      read -r n _ has_label stopped <<<"$open"
+      # A PR whose labels call failed has neither label. Add them back, once: a PR that has
+      # agent-run is left as it is, so a needs-help the user removed isn't added again.
+      if [ "$has_label" = false ]; then
+        local labels=(-f "labels[]=$LABEL_RUN")
+        [ "$stopped" = true ] && labels+=(-f "labels[]=$LABEL_HELP")
+        log "PR #$n has no $LABEL_RUN label: adding its labels"
+        ensure_labels "$LABEL_RUN" "$LABEL_HELP"
+        gh_api -X POST "repos/$OWNER/$REPO/issues/$n/labels" "${labels[@]}" >/dev/null ||
+          fail "adding the labels of PR #$n failed"
+      fi
+      log "PR #$n is open"
       exit 0
     elif [ -n "$prs" ]; then
       log "$b: its PR is closed or merged, skipping it"
@@ -475,6 +517,9 @@ build() {
   git_c switch -q -f -C main origin/main
   git_c reset -q --hard origin/main
   git_c clean -q -ffd
+  # Nothing from an earlier ticket's agent counts for this one: build() empties .agent/ (it's
+  # ignored, so git clean keeps it). A stop for help before any agent run then uses no old pr.md.
+  rm -rf "$clone/.agent"
   local b
   for b in $(git_c for-each-ref --format='%(refname:short)' refs/heads); do
     [ "$b" = main ] || git_c branch -q -D "$b"
@@ -490,6 +535,7 @@ build() {
   for part in . server app; do
     (cd "$clone/$part" && no_token npm ci 9>&-) || fail "npm ci failed in $part"
   done
+  save_config
   local out rc=0
   out=$( (cd "$clone" && scripts/ticket.sh claim next "$agent") 2>&1) || rc=$?
   printf '%s\n' "$out"
@@ -501,6 +547,8 @@ build() {
   esac
   ticket=$(git_c symbolic-ref --short HEAD)
   log "claimed $ticket"
+  # From here until the push, nothing needs the token: the agent and the checks run without it.
+  drop_token
   fill "$prompts/settings.json" "$run/settings.json" APP_CONFIG "$config" GH_CONFIG "$gh_config" SSH "$ssh_dir"
 
   local try=1 prompt=$run/prompt.md failed=$run/failed.out last_pr=$run/last-pr.md rc
@@ -508,7 +556,7 @@ build() {
   while :; do
     rc=0
     run_agent "$try" "$prompt" || rc=$?
-    new_token
+    restore_config
     local line
     if [ "$rc" -ne 0 ] && line=$(limit_line "$run/agent-$try.out"); then
       stop_for_help "$ticket" "$(reason_file "Claude's usage limit was reached during try $try of $TRIES:
