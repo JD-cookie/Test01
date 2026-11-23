@@ -302,7 +302,7 @@ run_dir() { ls -d "$T/state/jd-cookie-agent/runs/"* | tail -n 1; }
 # "Stopping for help" says.
 restore() {
   git clone -q "$T/origin.git" "$2"
-  git -C "$2" checkout -q "$(cat "$1/base.txt")"
+  [ "$(cat "$1/base.txt")" = none ] || git -C "$2" checkout -q "$(cat "$1/base.txt")"
   if [ -f "$1/commits.bundle" ]; then
     git -C "$2" fetch -q "$1/commits.bundle" HEAD && git -C "$2" checkout -q FETCH_HEAD
   fi
@@ -518,6 +518,22 @@ agent_commit 2 'feat(server): do a thing'
 run_runner
 expect "no Ticket line: try 1 failed, try 2 opened the PR" [ "$(claude_calls)/$(prs)" = "2/1" ]
 expect "no Ticket line: the fix prompt says so" grep -q 'must start with the line: Ticket: 0042-thing' "$T/calls/claude-2.prompt"
+# A Ticket line inside another line, or with another path: failed tries too.
+for bad in 'Note: Ticket: 0042-thing (docs/tickets/0042-thing.md)' 'Ticket: 0042-thing (wrong-path)'; do
+  setup
+  printf 'echo x >>src/file.txt && git commit -q -am "feat(server): x"\nprintf "feat(server): do a thing\\n\\n%s\\n" >.agent/pr.md\n' "$bad" >"$T/agent/1"
+  agent_commit 2 'feat(server): do a thing'
+  run_runner
+  expect "Ticket line '$bad': try 1 failed, try 2 opened the PR" [ "$(claude_calls)/$(prs)" = "2/1" ]
+done
+# A valid Ticket line and a long body (more than a pipe holds): the PR opens after one try.
+setup
+cat >"$T/agent/default" <<'EOF'
+echo x >>src/file.txt && git commit -q -am "feat(server): x"
+{ printf 'feat(server): do a thing\n\nTicket: 0042-thing (docs/tickets/0042-thing.md)\n'; for i in $(seq 3000); do printf 'evidence line %04d: %0100d\n' "$i" 0; done; } >.agent/pr.md
+EOF
+run_runner
+expect "a long valid body: one try, a normal PR" [ "$(claude_calls)/$(prs)/$(pr_json "$(last_pr)" | jq -r .draft)" = "1/1/false" ]
 
 # The agent's own commitlint config doesn't count: main's does, and the agent's isn't loaded.
 setup
@@ -704,6 +720,25 @@ r=$(run_dir)
 expect "a branch that moved on: a draft PR with needs-help" [ "$(tr '\n' ' ' <"$T/calls/pr-$(last_pr).labels")" = "agent-run needs-help " ]
 restore "$r" "$T/restored"
 expect "a branch that moved on: restoring gives the clone's tree" [ "$(tree_of "$T/restored")" = "$(tree_of "$clone")" ]
+# A claim with no PR, whose local branch shares no commit with origin (its history rewritten):
+# the work is still saved, with base.txt "none" and the whole history in the bundle.
+setup
+claim_branch "$AGENT"
+mkdir -p "$XDG_DATA_HOME/jd-cookie-agent"
+git clone -q "$T/origin.git" "$XDG_DATA_HOME/jd-cookie-agent/repo"
+clone=$XDG_DATA_HOME/jd-cookie-agent/repo
+git -C "$clone" switch -q --orphan 0042-thing
+mkdir -p "$clone/src"
+echo "rewritten" >"$clone/src/file.txt"
+git -C "$clone" add -A
+git -C "$clone" -c user.name=x -c user.email=x@example.invalid commit -q -m "chore: unrelated history"
+echo "uncommitted" >>"$clone/src/file.txt"
+run_runner
+r=$(run_dir)
+expect "unrelated histories: a draft PR with needs-help (exit $rc)" [ "$(tr '\n' ' ' <"$T/calls/pr-$(last_pr).labels" 2>/dev/null)" = "agent-run needs-help " ]
+expect "unrelated histories: base.txt says none" [ "$(cat "$r/base.txt" 2>/dev/null)" = none ]
+restore "$r" "$T/restored"
+expect "unrelated histories: restoring gives the clone's tree" [ "$(tree_of "$T/restored")" = "$(tree_of "$clone")" ]
 # A withdrawn ticket (claim exit 5) before any agent run: the draft doesn't reuse an old pr.md.
 setup
 w=$T/fakeseed

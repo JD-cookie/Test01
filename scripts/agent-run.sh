@@ -319,8 +319,11 @@ checks() {
     echo "The agent didn't write .agent/pr.md, or its first line (the PR's title) is empty." >"$out"
     return 1
   fi
-  if ! tail -n +2 "$clone/.agent/pr.md" | grep -v '^[[:space:]]*$' | head -n 1 | grep -qF "Ticket: $ticket ("; then
-    echo "The PR body in .agent/pr.md (after the title) must start with the line: Ticket: $ticket (docs/tickets/$ticket.md), as next-ticket step 3 says." >"$out"
+  # One awk reads the file, with no pipe for pipefail to trip on when the body is long.
+  local want="Ticket: $ticket (docs/tickets/$ticket.md)" got
+  got=$(awk 'NR > 1 && $0 !~ /^[[:space:]]*$/ { sub(/[[:space:]]+$/, ""); print; exit }' "$clone/.agent/pr.md")
+  if [ "$got" != "$want" ]; then
+    echo "The PR body in .agent/pr.md (after the title) must start with the line: $want, as next-ticket step 3 says. Its first line is: ${got:-(none)}" >"$out"
     return 1
   fi
   log "checking the PR's title with commitlint"
@@ -357,14 +360,19 @@ stop_for_help() {
   local base saved=()
   # The newest commit both HEAD and origin's branch have, so the bundle (if any) and the patch
   # rebuild HEAD exactly, even if origin's branch moved on while HEAD stayed behind.
+  # If HEAD shares no commit with either (its history was rewritten), there's no base: base.txt
+  # says "none", and the bundle holds HEAD's whole history.
+  base=
   if git_c rev-parse -q --verify "refs/remotes/origin/$branch" >/dev/null; then
-    base=$(git_c merge-base HEAD "origin/$branch")
-  else
-    base=$(git_c merge-base HEAD origin/main)
+    base=$(git_c merge-base HEAD "origin/$branch") || base=
   fi
-  echo "$base" >"$run/base.txt"
+  [ -n "$base" ] || base=$(git_c merge-base HEAD origin/main) || base=
+  echo "${base:-none}" >"$run/base.txt"
   saved+=(base.txt)
-  if [ -n "$(git_c rev-list "$base..HEAD")" ]; then
+  if [ -z "$base" ]; then
+    git_c bundle create -q "$run/commits.bundle" HEAD
+    saved+=(commits.bundle)
+  elif [ -n "$(git_c rev-list "$base..HEAD")" ]; then
     git_c bundle create -q "$run/commits.bundle" "$base..HEAD"
     saved+=(commits.bundle)
   fi
@@ -375,7 +383,7 @@ stop_for_help() {
   fi
   git_c reset -q
   local pushed_note=""
-  if [ "$refused" != refused ] && [ -n "$(git_c rev-list "$base..HEAD")" ]; then
+  if [ "$refused" != refused ] && { [ -z "$base" ] || [ -n "$(git_c rev-list "$base..HEAD")" ]; }; then
     local out
     if out=$(push_branch "$branch"); then
       log "pushed the work so far to $branch"
@@ -413,7 +421,7 @@ stop_for_help() {
     let head = stopMark + "\n\n" + reason + "\n\n" +
       (note ? note + "\n\n" : "") +
       "Run folder: `" + runDir + "`, with " + saved.split(" ").map(f => "`" + f + "`").join(", ") +
-      ". To restore the work in a fresh clone: check out the commit in `base.txt`; if `commits.bundle` is there, `git fetch <run folder>/commits.bundle HEAD` and `git checkout FETCH_HEAD`; if `uncommitted.patch` is there, `git apply` it.\n\n" +
+      ". To restore the work in a fresh clone: check out the commit in `base.txt` (if it says `none`, skip this: the bundle has the whole history); if `commits.bundle` is there, `git fetch <run folder>/commits.bundle HEAD` and `git checkout FETCH_HEAD`; if `uncommitted.patch` is there, `git apply` it.\n\n" +
       "Fix what is needed by hand, then mark this PR ready for review.\n";
     let output = fs.readFileSync(outputF, "utf8").trim();
     let body = fs.readFileSync(bodyF, "utf8").trim();
@@ -467,7 +475,8 @@ find_work() {
   local heads b claim who prs
   heads=$(git_c ls-remote --heads origin) || fail "couldn't list origin's branches"
   for b in $(printf '%s\n' "$heads" | sed -n 's#.*refs/heads/\([0-9][0-9][0-9][0-9]-[a-z0-9-]*\)$#\1#p'); do
-    claim=$(git_c rev-list --topo-order --reverse "origin/main..origin/$b" | head -n 1)
+    # awk reads all of rev-list's output, so a long branch can't end it with SIGPIPE.
+    claim=$(git_c rev-list --topo-order --reverse "origin/main..origin/$b" | awk 'NR == 1')
     [ -n "$claim" ] || continue
     who=$(git_c log -1 --format='%(trailers:key=Claimed-By,valueonly)' "$claim" | tr -d '[:space:]')
     [ "$who" = "$agent" ] || continue
