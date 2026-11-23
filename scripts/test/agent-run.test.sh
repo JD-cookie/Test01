@@ -938,6 +938,20 @@ for kind in environ key; do
   expect "a linked pr.md ($kind): neither is in a run file or a command line" bash -c "! grep -rqF -e '$FAKE_TOKEN' -e 'PRIVATE KEY' '$T/state' '$T/calls/'*.args"
   expect "a linked pr.md ($kind): the log says it was ignored" grep -q "ignoring .agent/pr.md" "$T/out"
 done
+# The agent replaces .git with a symlink to another git folder: the runner stops, and doesn't
+# write that folder's config.
+setup
+cat >"$T/agent/default" <<EOF
+echo change >>src/file.txt && git commit -q -am "feat(server): change"
+printf 'feat(server): do a thing\\n\\nTicket: 0042-thing (docs/tickets/0042-thing.md)\\n' >.agent/pr.md
+mv .git "$T/other-git" && ln -s "$T/other-git" .git
+echo "[keep]" >>"$T/other-git/config"
+EOF
+run_runner
+expect "a symlinked .git: the run stops (exit $rc)" [ "$rc" -eq 1 ]
+expect "a symlinked .git: it says why" grep -q "the clone's .git isn't a folder" "$T/out"
+expect "a symlinked .git: the other folder's config is unchanged" grep -qx '\[keep\]' "$T/other-git/config"
+expect "a symlinked .git: no PR" [ "$(prs)" -eq 0 ]
 # The agent points .git/commondir at a copy of the git folder whose config pushes to a decoy:
 # the push still goes to origin.
 setup

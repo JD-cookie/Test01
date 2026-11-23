@@ -122,6 +122,11 @@ git_c() { git -C "$clone" -c core.hooksPath=/dev/null -c core.fsmonitor=false "$
 # check wrote there (an insteadOf rewrite, a push URL, an include, a hook path) is gone. It's
 # written, not copied back, because a saved copy would be a file the agent could edit too.
 write_config() {
+  # .git must be the clone's own folder: if the agent made it a symlink, the writes below would
+  # land in whatever folder it points to.
+  if [ -L "$clone/.git" ] || [ ! -d "$clone/.git" ]; then
+    fail "the clone's .git isn't a folder (a symlink, or missing): not using it"
+  fi
   # rm first: if the agent made one a symlink, writing through it would change its target.
   [ ! -L "$clone/.git/info" ] || rm -f "$clone/.git/info"
   rm -f "$clone/.git/config" "$clone/.git/info/exclude"
@@ -153,12 +158,27 @@ EOF
 take_agent_files() {
   rm -rf "$agent_files"
   mkdir -p "$agent_files"
-  local f src
+  local f rc
   for f in pr.md stop.md; do
-    src=$clone/.agent/$f
-    if [ ! -L "$clone/.agent" ] && [ -f "$src" ] && [ ! -L "$src" ] && [ "$(stat -c %h "$src")" = 1 ]; then
-      cp "$src" "$agent_files/$f"
-    elif [ -e "$src" ] || [ -L "$src" ]; then
+    # node opens the file without following a symlink (O_NOFOLLOW), checks the file it opened
+    # (fstat), and reads from that same descriptor, so nothing can be swapped in between a
+    # check and the copy. Exit 2: there's no such file.
+    rc=0
+    node -e '
+      const fs = require("fs"), path = require("path");
+      const [dir, name, dest] = process.argv.slice(1);
+      let d;
+      try { d = fs.lstatSync(dir); } catch { process.exit(2); }
+      if (!d.isDirectory()) process.exit(1);
+      let fd;
+      try { fd = fs.openSync(path.join(dir, name), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW); }
+      catch (e) { process.exit(e.code === "ENOENT" ? 2 : 1); }
+      const s = fs.fstatSync(fd);
+      if (!s.isFile() || s.nlink !== 1) process.exit(1);
+      fs.writeFileSync(dest, fs.readFileSync(fd));
+    ' "$clone/.agent" "$f" "$agent_files/$f" || rc=$?
+    if [ "$rc" -eq 1 ]; then
+      rm -f "$agent_files/$f"
       log "ignoring .agent/$f: it isn't a regular file with one link"
       : >"$agent_files/$f.refused"
     fi
