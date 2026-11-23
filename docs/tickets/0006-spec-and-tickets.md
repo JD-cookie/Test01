@@ -268,6 +268,7 @@ Built on branch `0006-spec-and-tickets`, claimed with `scripts/ticket.sh claim 0
   - opencode: 0003's check 2 still said "Pending … until a refinement ran them", with the result only in "Changed after delivery". Fixed: it says they passed in 0006's refinement.
   - opencode (needs a run): the permalink to 0003's spec at 41516db names the three-digit file `003-refine-ticket-skill.md`. Run: `git cat-file -e 41516dbd2ca3663dd210b6a4aa6457aa64dfb92e:docs/features/003-refine-ticket-skill.md` succeeds, since the four-digit names came later, in PR #16. Answered: it's right, and check 3's checker tests it too.
   - Both copies' `git status --porcelain --ignored` was the same after the review as before.
+- **Qodo** reviewed 0e8f6b9 and then d58ff88: no bugs, rule violations, or requirement gaps (`🐞 Bugs (0)`, `📘 Rule violations (0)`, `📎 Requirement gaps (0)`), merge risk low. CI (app, server, pr-title) passed.
 
 **Rules, skills, or reviewer context:** none to change beyond this ticket. Check 3's link checker would be worth keeping: it's the "link checker in CI" left out of scope, and the known gap in "Security and configuration".
 
