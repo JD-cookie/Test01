@@ -11,8 +11,8 @@
 #   1. A JWT, signed with the App's private key with openssl: valid from a minute ago for ten minutes.
 #   2. GET /repos/<owner>/<repo>/installation, with the JWT: the installation's id.
 #   3. POST /app/installations/<id>/access_tokens, with the JWT, limited to this repo: the token.
-# curl reads the Authorization header from a file in a private temporary folder, so neither the
-# JWT nor the token is ever on a command line, where ps shows it.
+# curl reads the headers, with the JWT, from its stdin (-H @-), and writes the answer to its
+# stdout, so neither the JWT nor the token is on a command line, where ps shows it, or in a file.
 #
 # Files: ${XDG_CONFIG_HOME:-$HOME/.config}/jd-cookie-agent/app.pem (mode 600) and app.env
 # (APP_CLIENT_ID=…, not secret). For tests only, AGENT_RUN_GITHUB_API replaces the API's base URL.
@@ -40,10 +40,6 @@ case $client_id in
   '' | *[!A-Za-z0-9._-]*) die "$config/app.env must set APP_CLIENT_ID to the App's client id" ;;
 esac
 
-tmp=$(mktemp -d) || die "couldn't make a temporary folder"
-chmod 700 "$tmp"
-trap 'rm -rf "$tmp"' EXIT INT TERM
-
 b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 
 now=$(date +%s) || die "couldn't read the clock"
@@ -52,38 +48,40 @@ payload=$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$((now - 60))" "$((now + 540)
 signature=$(printf '%s.%s' "$header" "$payload" | openssl dgst -sha256 -sign "$key" | b64url) ||
   die "couldn't sign the JWT with $key"
 [ -n "$signature" ] || die "couldn't sign the JWT with $key"
-{
-  printf 'Authorization: Bearer %s.%s.%s\n' "$header" "$payload" "$signature"
-  printf 'Accept: application/vnd.github+json\n'
-  printf 'X-GitHub-Api-Version: 2022-11-28\n'
-} >"$tmp/headers"
+jwt=$header.$payload.$signature
 
 # Calls the API: $1 is the step's name (for messages), $2 the method, $3 the path, $4 an optional
-# body. The response body is left in $tmp/body. Fails with the HTTP status unless it's 2xx.
+# JSON body (not secret). Sets $answer to the response body. Fails with the HTTP status unless
+# it's 2xx. The headers, with the JWT, go to curl on its stdin.
 call() {
   set -- "$1" "$2" "$3" "${4:-}"
-  if [ -n "$4" ]; then
-    printf '%s' "$4" >"$tmp/request"
-    status=$(curl -sS -o "$tmp/body" -w '%{http_code}' -X "$2" -H @"$tmp/headers" \
-      -H 'Content-Type: application/json' --data-binary @"$tmp/request" "$api$3") ||
-      die "$1: the request to $3 failed"
-  else
-    status=$(curl -sS -o "$tmp/body" -w '%{http_code}' -X "$2" -H @"$tmp/headers" "$api$3") ||
-      die "$1: the request to $3 failed"
-  fi
+  local out
+  out=$(printf 'Authorization: Bearer %s\nAccept: application/vnd.github+json\nX-GitHub-Api-Version: 2022-11-28\n' "$jwt" |
+    if [ -n "$4" ]; then
+      curl -sS -w '\n%{http_code}' -X "$2" -H @- -H 'Content-Type: application/json' --data-binary "$4" "$api$3"
+    else
+      curl -sS -w '\n%{http_code}' -X "$2" -H @- "$api$3"
+    fi) || die "$1: the request to $3 failed"
+  status=${out##*
+}
+  answer=${out%
+*}
   case $status in
     2??) ;;
     *) die "$1: GitHub answered HTTP $status for $2 $3" ;;
   esac
 }
 
-# Prints one field of the JSON in $tmp/body, or fails. node is one of the runner's tools.
+# Prints one field of the JSON in $answer, read from stdin, or fails. node is one of the
+# runner's tools.
 field() {
-  node -e '
-    const v = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))[process.argv[2]];
-    if (v === undefined || v === null || v === "") process.exit(1);
-    process.stdout.write(String(v));
-  ' "$tmp/body" "$1"
+  printf '%s' "$answer" | node -e '
+    let s = ""; process.stdin.on("data", d => s += d).on("end", () => {
+      const v = JSON.parse(s)[process.argv[1]];
+      if (v === undefined || v === null || v === "") process.exit(1);
+      process.stdout.write(String(v));
+    });
+  ' "$1"
 }
 
 call "finding the App's installation" GET "/repos/$owner/$repo/installation"
@@ -92,6 +90,7 @@ case $installation in *[!0-9]*) die "finding the App's installation: the id isn'
 
 call "making the token" POST "/app/installations/$installation/access_tokens" "{\"repositories\":[\"$repo\"]}"
 token=$(field token) || die "making the token: the answer had no token"
+answer=
 
 # The token is opaque: GitHub's start with ghs_, are about 520 characters, and contain dots.
 # Nothing here checks its length or shape.

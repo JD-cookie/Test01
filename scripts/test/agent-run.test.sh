@@ -119,27 +119,28 @@ write_stubs() {
   # curl: the token's two API calls. Records the Authorization header and the order of calls.
   cat >"$T/bin/curl" <<'EOF'
 #!/usr/bin/env bash
-out= method=GET hdr= url=
+# The whole command line, before it's parsed: the token and the JWT must never be on it.
+printf '%s\n' "$*" >>"$STUB_T/calls/curl.args"
+method=GET url= headers_in=no
 while [ $# -gt 0 ]; do
   case $1 in
-    -o) out=$2; shift ;;
+    -o) echo "curl stub: -o (writing the answer to a file) isn't expected" >&2; exit 2 ;;
     -w) shift ;;
     -X) method=$2; shift ;;
-    -H) case $2 in @*) hdr=${2#@} ;; esac; shift ;;
+    -H) [ "$2" = @- ] && headers_in=yes; shift ;;
     --data-binary) shift ;;
     -*) ;;
     *) url=$1 ;;
   esac
   shift
 done
-printf '%s\n' "$*" >>"$STUB_T/calls/curl.args"
-grep '^Authorization:' "$hdr" | sed 's/^Authorization: Bearer //' >>"$STUB_T/calls/jwt"
+[ "$headers_in" = yes ] && grep '^Authorization:' | sed 's/^Authorization: Bearer //' >>"$STUB_T/calls/jwt"
 mode=$(cat "$STUB_T/curl.mode" 2>/dev/null || echo ok)
-if [ "$mode" = 401 ]; then echo '{"message":"Bad credentials"}' >"$out"; printf 401; exit 0; fi
+if [ "$mode" = 401 ]; then printf '{"message":"Bad credentials"}\n401'; exit 0; fi
 case $url in
-  */installation) echo '{"id":77}' >"$out"; printf 200 ;;
-  */access_tokens) echo token >>"$STUB_T/calls/seq"; printf '{"token":"%s"}' "$(cat "$STUB_T/token")" >"$out"; printf 201 ;;
-  *) echo '{}' >"$out"; printf 404 ;;
+  */installation) printf '{"id":77}\n200' ;;
+  */access_tokens) echo token >>"$STUB_T/calls/seq"; printf '{"token":"%s"}\n201' "$(cat "$STUB_T/token")" ;;
+  *) printf '{}\n404' ;;
 esac
 EOF
   # gh: only "gh api", against files in $T/gh. --jq goes through jq, like gh's.
@@ -181,6 +182,9 @@ case "$method $path" in
     head=${path#*head=JD-cookie:}; head=${head%%&*}
     jq --arg h "$head" '[.[] | select(.head.ref == $h)]' "$G/pulls.json" | answer ;;
   "POST repos/JD-cookie/Test01/pulls")
+    if [ "$(jq '.body | length' "$input")" -gt 65536 ]; then
+      echo "gh: Validation Failed: body is too long (maximum is 65536 characters) (HTTP 422)" >&2; exit 1
+    fi
     n=$((100 + $(jq length "$G/pulls.json")))
     cp "$input" "$STUB_T/calls/pr-$n.json"
     echo "pr $n" >>"$STUB_T/calls/seq"
@@ -233,6 +237,7 @@ case "$1 ${2:-}" in
       fail-once) [ "$n" -ge 2 ] || { echo "first check fails"; exit 1; } ;;
       hang) [ "$n" -ge 2 ] || { trap '' TERM; while :; do sleep 0.1; done; } ;;
       modify) echo changed >>src/file.txt; exit 0 ;;
+      tamper) git config remote.origin.pushurl "$STUB_T/decoy.git"; git config url."$STUB_T/decoy.git".insteadOf "$STUB_T/origin.git"; exit 0 ;;
       big) for i in $(seq 300); do printf 'L%03d %0400d\n' "$i" 0; done; exit 1 ;;
     esac ;;
   *) ;;
@@ -526,14 +531,27 @@ for bad in 'Note: Ticket: 0042-thing (docs/tickets/0042-thing.md)' 'Ticket: 0042
   run_runner
   expect "Ticket line '$bad': try 1 failed, try 2 opened the PR" [ "$(claude_calls)/$(prs)" = "2/1" ]
 done
-# A valid Ticket line and a long body (more than a pipe holds): the PR opens after one try.
+# A valid Ticket line and a long body: 58,000 characters, under the limit, but 115,000 bytes,
+# more than a pipe holds. The PR opens after one try.
 setup
 cat >"$T/agent/default" <<'EOF'
 echo x >>src/file.txt && git commit -q -am "feat(server): x"
-{ printf 'feat(server): do a thing\n\nTicket: 0042-thing (docs/tickets/0042-thing.md)\n'; for i in $(seq 3000); do printf 'evidence line %04d: %0100d\n' "$i" 0; done; } >.agent/pr.md
+line=$(printf 'é%.0s' $(seq 99))
+{ printf 'feat(server): do a thing\n\nTicket: 0042-thing (docs/tickets/0042-thing.md)\n'; for i in $(seq 580); do printf '%s\n' "$line"; done; } >.agent/pr.md
 EOF
 run_runner
 expect "a long valid body: one try, a normal PR" [ "$(claude_calls)/$(prs)/$(pr_json "$(last_pr)" | jq -r .draft)" = "1/1/false" ]
+expect "a long valid body: more than 64 KiB" [ "$(wc -c <"$XDG_DATA_HOME/jd-cookie-agent/repo/.agent/pr.md")" -gt 65536 ]
+# A body over the limit: a failed try, and the fix prompt says so.
+setup
+cat >"$T/agent/1" <<'EOF'
+echo x >>src/file.txt && git commit -q -am "feat(server): x"
+{ printf 'feat(server): do a thing\n\nTicket: 0042-thing (docs/tickets/0042-thing.md)\n'; head -c 70000 /dev/zero | tr '\0' 'z'; echo; } >.agent/pr.md
+EOF
+agent_commit 2 'feat(server): do a thing'
+run_runner
+expect "a body over the limit: try 1 failed, try 2 opened the PR" [ "$(claude_calls)/$(prs)" = "2/1" ]
+expect "a body over the limit: the fix prompt says so" grep -q 'keep it under 60000' "$T/calls/claude-2.prompt"
 
 # The agent's own commitlint config doesn't count: main's does, and the agent's isn't loaded.
 setup
@@ -739,6 +757,19 @@ expect "unrelated histories: a draft PR with needs-help (exit $rc)" [ "$(tr '\n'
 expect "unrelated histories: base.txt says none" [ "$(cat "$r/base.txt" 2>/dev/null)" = none ]
 restore "$r" "$T/restored"
 expect "unrelated histories: restoring gives the clone's tree" [ "$(tree_of "$T/restored")" = "$(tree_of "$clone")" ]
+# A hook an earlier ticket's agent left in .husky/_, which husky's own .gitignore ignores, doesn't
+# run on the next ticket's claim push.
+setup
+mkdir -p "$XDG_DATA_HOME/jd-cookie-agent"
+git clone -q "$T/origin.git" "$XDG_DATA_HOME/jd-cookie-agent/repo"
+mkdir -p "$XDG_DATA_HOME/jd-cookie-agent/repo/.husky/_"
+echo '*' >"$XDG_DATA_HOME/jd-cookie-agent/repo/.husky/_/.gitignore"
+printf '#!/bin/sh\ntouch "%s/old-hook-ran"\n' "$T" >"$XDG_DATA_HOME/jd-cookie-agent/repo/.husky/_/pre-push"
+chmod +x "$XDG_DATA_HOME/jd-cookie-agent/repo/.husky/_/pre-push"
+agent_commit default 'feat(server): do a thing'
+run_runner
+expect "an old ignored hook: the run opened its PR" [ "$(prs)" -eq 1 ]
+expect "an old ignored hook: it didn't run on the claim's push" [ ! -e "$T/old-hook-ran" ]
 # A withdrawn ticket (claim exit 5) before any agent run: the draft doesn't reuse an old pr.md.
 setup
 w=$T/fakeseed
@@ -761,9 +792,11 @@ result 4 "crash, lock, and open PRs"
 
 setup
 agent_commit default 'feat(server): do a thing'
-export STUB_CRED=1
+# A credential helper in the user's own git config, which must never be asked or told.
+git config --file "$T/gitconfig" credential.helper "!f() { echo \"\$1\" >>'$T/user-helper-calls'; echo username=user; echo password=USERS-PAT; }; f"
+export STUB_CRED=1 GIT_CONFIG_GLOBAL=$T/gitconfig
 run_runner
-unset STUB_CRED
+unset STUB_CRED GIT_CONFIG_GLOBAL
 clone=$XDG_DATA_HOME/jd-cookie-agent/repo
 jwt=$(head -n 1 "$T/calls/jwt")
 IFS=. read -r jh jp js <<<"$jwt"
@@ -777,6 +810,8 @@ expect "the JWT's header" [ "$(b64d "$jh")" = '{"alg":"RS256","typ":"JWT"}' ]
 expect "the 520-character token reaches gh as GH_TOKEN" [ "$(cat "$T/calls/gh.token")" = "$FAKE_TOKEN" ]
 expect "the fake token has 520 characters" [ "${#FAKE_TOKEN}" -eq 520 ]
 expect "the credential helper answers with the token" bash -c "grep -qx 'username=x-access-token' '$T/calls/cred.out' && grep -qxF 'password=$FAKE_TOKEN' '$T/calls/cred.out'"
+expect "the user's own credential helper is never asked or told" [ ! -e "$T/user-helper-calls" ]
+expect "curl never writes an answer to a file" bash -c "! grep -qE '(^| )-o( |$)' '$T/calls/curl.args'"
 expect "the credential helper gives nothing for another host" bash -c "! grep -q '^password=' '$T/calls/cred-other.out'"
 expect "the clone's .git/config has no credential.helper" bash -c "! grep -q credential '$clone/.git/config'"
 # A new token after the agent's run, before the push and the PR.
@@ -808,6 +843,7 @@ export VALKEY_URL=redis://127.0.0.1:6379/0
 echo fail-once >"$T/check.mode"
 cat >"$T/agent/1" <<'EOF'
 mkdir -p scripts/agent-run && echo '{"permissions":{"allow":["Bash"]}}' >scripts/agent-run/settings.json
+echo '{"permissions":{"allow":["Bash"]}}' >"$settings"
 git add -A && git commit -q -m "chore(repo): settings"
 printf 'feat(server): do a thing\n' >.agent/pr.md
 git config core.hooksPath .husky
@@ -821,7 +857,7 @@ clone=$XDG_DATA_HOME/jd-cookie-agent/repo
 expect "the run finished with a PR (exit $rc)" [ "$rc/$(prs)" = "0/1" ]
 expect "claude gets --settings" grep -qx -- '--settings' "$T/calls/claude-1.args"
 expect "claude gets --strict-mcp-config" grep -qx -- '--strict-mcp-config' "$T/calls/claude-1.args"
-expect "try 2's settings are try 1's, whatever the clone's say" cmp -s "$T/calls/claude-1.settings" "$T/calls/claude-2.settings"
+expect "try 2's settings are try 1's, whatever the clone's and the filled copy say" cmp -s "$T/calls/claude-1.settings" "$T/calls/claude-2.settings"
 expect "the settings come from the runner's folder" bash -c "jq -e '.permissions.allow | index(\"WebSearch\")' '$T/calls/claude-1.settings'"
 expect "the settings allow exactly the listed WebFetch domains" [ "$(jq -r '.permissions.allow[] | select(startswith("WebFetch"))' "$T/calls/claude-1.settings" | sort | tr '\n' ' ')" = "WebFetch(domain:developer.mozilla.org) WebFetch(domain:docs.expo.dev) WebFetch(domain:docs.github.com) WebFetch(domain:docs.npmjs.com) WebFetch(domain:fastify.dev) WebFetch(domain:nodejs.org) WebFetch(domain:reactnative.dev) WebFetch(domain:sqlite.org) WebFetch(domain:valkey.io) WebFetch(domain:www.npmjs.com) WebFetch(domain:www.typescriptlang.org) " ]
 for d in "$T/config/jd-cookie-agent" "$T/config/gh" "$HOME/.ssh"; do
@@ -865,6 +901,16 @@ expect "a tampered .git/config: the push went to origin" bash -c "git -C '$T/ori
 expect "a tampered .git/config: nothing reached the decoy" [ -z "$(git -C "$T/decoy.git" for-each-ref)" ]
 expect "a tampered .git/config: no fsmonitor command ran" [ ! -e "$T/fsmonitor-ran" ]
 expect "a tampered .git/config: it's put back" bash -c "! grep -qiE 'insteadOf|pushurl|fsmonitor' '$XDG_DATA_HOME/jd-cookie-agent/repo/.git/config'"
+
+# A check that tampers with .git/config: the push still goes to origin.
+setup
+git init -q --bare "$T/decoy.git"
+echo tamper >"$T/check.mode"
+agent_commit default 'feat(server): do a thing'
+run_runner
+expect "a check that tampers with .git/config: the push went to origin" bash -c "git -C '$T/origin.git' log --format=%s 0042-thing | grep -q 'change 1'"
+expect "a check that tampers with .git/config: nothing reached the decoy" [ -z "$(git -C "$T/decoy.git" for-each-ref)" ]
+expect "the sandbox mounts the clone's .git read-only" bash -c "grep -A2 -x -- '--ro-bind' \$(grep -lx npm '$T/calls/'bwrap-*.args | head -n 1) | grep -qx '$XDG_DATA_HOME/jd-cookie-agent/repo/.git'"
 
 # XDG_RUNTIME_DIR unset: exit 1 with its message, no claude call.
 setup
@@ -924,6 +970,15 @@ else
     fi
     sbr+=("${x//$clone/$repo}")
   done
+  # The hook's snapshot has no .git: drop its read-only mount then.
+  if [ ! -e "$repo/.git" ]; then
+    keep=()
+    for ((i = 0; i < ${#sbr[@]}; i++)); do
+      if [ "${sbr[i]}" = --ro-bind ] && [ "${sbr[i+1]}" = "$repo/.git" ]; then i=$((i + 2)); continue; fi
+      keep+=("${sbr[i]}")
+    done
+    sbr=("${keep[@]}")
+  fi
   "$real_bwrap" "${sbr[@]}" npm run test:scripts >"$T/inner.out" 2>&1
   inner=$?
   expect "the real bwrap: npm run test:scripts passes inside it (exit $inner): $(grep -E '^not ok' "$T/inner.out" | head -n 3 | tr '\n' ' ')" [ "$inner" -eq 0 ]

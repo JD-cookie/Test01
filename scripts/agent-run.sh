@@ -111,15 +111,28 @@ gh_api() {
 }
 
 # The runner's own git commands in the clone. The agent can edit .git/config, so they run no
-# hooks and no fsmonitor, and the config itself is put back after each agent run (save_config).
+# hooks and no fsmonitor, and the config itself is rewritten (write_config) before them.
 git_c() { git -C "$clone" -c core.hooksPath=/dev/null -c core.fsmonitor=false "$@"; }
 
-# The clone's .git/config as the runner left it, kept outside the clone. save_config takes the
-# copy; restore_config puts it back, undoing anything the agent changed there (an insteadOf
-# rewrite, a push URL, a hook path, an include).
-config_copy=$data/clone-config
-save_config() { cp "$clone/.git/config" "$config_copy"; }
-restore_config() { [ ! -f "$config_copy" ] || cp "$config_copy" "$clone/.git/config"; }
+# Writes the clone's .git/config and .git/info/exclude from scratch, with only what the runner
+# needs: origin, and husky's hook path for the agent's own commits. Anything the agent or a
+# check wrote there (an insteadOf rewrite, a push URL, an include, a hook path) is gone. It's
+# written, not copied back, because a saved copy would be a file the agent could edit too.
+write_config() {
+  cat >"$clone/.git/config" <<EOF
+[core]
+	repositoryformatversion = 0
+	filemode = true
+	bare = false
+	logallrefupdates = true
+	hooksPath = .husky/_
+[remote "origin"]
+	url = $origin_url
+	fetch = +refs/heads/*:refs/remotes/origin/*
+EOF
+  mkdir -p "$clone/.git/info"
+  printf '%s\n' '.agent/' >"$clone/.git/info/exclude"
+}
 
 # Pushes HEAD to the branch $1 without hooks: the agent can edit .husky/, and a hook it added
 # would run while the token is in the environment. Prints git's output. Exit code is git's.
@@ -158,7 +171,9 @@ sandbox_cmd() {
   for d in "$config" "$gh_config" "$ssh_dir"; do
     [ -d "$d" ] && SANDBOX+=(--tmpfs "$d")
   done
+  # The clone is writable, but its .git isn't: a check can't add a push URL or a hook.
   SANDBOX+=(--tmpfs /tmp --bind "$clone" "$clone")
+  [ -e "$clone/.git" ] && SANDBOX+=(--ro-bind "$clone/.git" "$clone/.git")
   [ -d "$npm_cache" ] && SANDBOX+=(--bind "$npm_cache" "$npm_cache")
   SANDBOX+=(--unshare-pid --unshare-net --die-with-parent --chdir "$clone" env AGENT_RUN_IN_SANDBOX=1)
 }
@@ -225,7 +240,9 @@ ensure_labels() {
   have=$(gh_api --paginate "repos/$OWNER/$REPO/labels?per_page=100" --jq '.[].name') ||
     fail "couldn't list the repo's labels"
   for name in "$@"; do
-    printf '%s\n' "$have" | grep -qxF -- "$name" && continue
+    # A here-string, not a pipe: grep -q stops at the first match, which under pipefail would
+    # fail a long writer with SIGPIPE.
+    grep -qxF -- "$name" <<<"$have" && continue
     log "creating the label $name"
     gh_api -X POST "repos/$OWNER/$REPO/labels" -f name="$name" -f color=ededed \
       -f description="Set by the runner, scripts/agent-run.sh" >/dev/null || fail "couldn't create the label $name"
@@ -322,6 +339,12 @@ checks() {
   # One awk reads the file, with no pipe for pipefail to trip on when the body is long.
   local want="Ticket: $ticket (docs/tickets/$ticket.md)" got
   got=$(awk 'NR > 1 && $0 !~ /^[[:space:]]*$/ { sub(/[[:space:]]+$/, ""); print; exit }' "$clone/.agent/pr.md")
+  local size
+  size=$(node -e 'const fs = require("fs"); const t = fs.readFileSync(process.argv[1], "utf8"); const i = t.indexOf("\n"); process.stdout.write(String(i < 0 ? 0 : [...t.slice(i + 1)].length))' "$clone/.agent/pr.md")
+  if [ "$size" -gt "$DESC_MAX" ]; then
+    echo "The PR body in .agent/pr.md has $size characters: keep it under $DESC_MAX (GitHub's limit is 65,536). Put long output in the ticket doc's Delivery and review instead." >"$out"
+    return 1
+  fi
   if [ "$got" != "$want" ]; then
     echo "The PR body in .agent/pr.md (after the title) must start with the line: $want, as next-ticket step 3 says. Its first line is: ${got:-(none)}" >"$out"
     return 1
@@ -355,6 +378,7 @@ stop_for_help() {
   local branch=$1 reason=$2 output=${3:-} refused=${4:-}
   mkdir -p "$run"
   log "stopping for help: $(head -n 1 "$reason")"
+  write_config
   new_token
   git_c fetch -q origin || fail "couldn't fetch origin"
   local base saved=()
@@ -389,7 +413,7 @@ stop_for_help() {
       log "pushed the work so far to $branch"
     else
       printf '%s\n' "$out"
-      if printf '%s' "$out" | grep -qi 'workflow'; then
+      if grep -qi 'workflow' <<<"$out"; then
         pushed_note="GitHub refused the push, because the branch changes a workflow. The branch on GitHub has only what was there before."
       else
         pushed_note="The push failed, so the branch on GitHub has only what was there before."
@@ -462,10 +486,9 @@ ensure_clone() {
     log "cloning $origin_url into $clone"
     git clone -q "$origin_url" "$clone" || fail "cloning failed"
   fi
-  restore_config
-  git_c remote set-url origin "$origin_url"
-  # .agent/ is ignored by the repo's .gitignore too; this keeps it ignored whatever the branch says.
-  grep -qxF '.agent/' "$clone/.git/info/exclude" 2>/dev/null || echo '.agent/' >>"$clone/.git/info/exclude"
+  # .agent/ is ignored by the repo's .gitignore too; write_config keeps it ignored whatever the
+  # branch says, and drops anything else the agent added to .git/info/exclude.
+  write_config
 }
 
 # Looks at the runner's own claim branches. Exits if one has an open PR, stops for help on one
@@ -485,7 +508,8 @@ find_work() {
       --jq ".[] | \"\\(.number) \\(.state) \\([.labels[]?.name] | index(\"$LABEL_RUN\") != null) \\((.body // \"\") | startswith(\"$STOP_MARK\"))\"") ||
       fail "couldn't list the PRs of $b"
     local open
-    if open=$(printf '%s\n' "$prs" | awk '$2 == "open" { print; exit }') && [ -n "$open" ]; then
+    open=$(awk '$2 == "open" && !found { print; found = 1 }' <<<"$prs")
+    if [ -n "$open" ]; then
       local n has_label stopped
       read -r n _ has_label stopped <<<"$open"
       # A PR whose labels call failed has neither label. Add them back, once: a PR that has
@@ -525,9 +549,9 @@ build() {
   log "updating the clone to origin/main"
   git_c switch -q -f -C main origin/main
   git_c reset -q --hard origin/main
-  git_c clean -q -ffd
-  # Nothing from an earlier ticket's agent counts for this one: build() empties .agent/ (it's
-  # ignored, so git clean keeps it). A stop for help before any agent run then uses no old pr.md.
+  # -x: ignored files go too, so nothing an earlier ticket's agent left (a hook it hid from git,
+  # an old .agent/pr.md) reaches this ticket's claim. npm ci reinstalls node_modules anyway.
+  git_c clean -q -ffdx
   rm -rf "$clone/.agent"
   local b
   for b in $(git_c for-each-ref --format='%(refname:short)' refs/heads); do
@@ -535,7 +559,7 @@ build() {
   done
   local listed
   listed=$(cd "$clone" && scripts/ticket.sh list) || fail "scripts/ticket.sh list failed"
-  if ! printf '%s\n' "$listed" | awk '$2 == "ready" && NF == 2' | grep -q .; then
+  if ! awk '$2 == "ready" && NF == 2 { found = 1 } END { exit !found }' <<<"$listed"; then
     log "no ready ticket"
     exit 0
   fi
@@ -544,7 +568,7 @@ build() {
   for part in . server app; do
     (cd "$clone/$part" && no_token npm ci 9>&-) || fail "npm ci failed in $part"
   done
-  save_config
+  write_config
   local out rc=0
   out=$( (cd "$clone" && scripts/ticket.sh claim next "$agent") 2>&1) || rc=$?
   printf '%s\n' "$out"
@@ -558,14 +582,15 @@ build() {
   log "claimed $ticket"
   # From here until the push, nothing needs the token: the agent and the checks run without it.
   drop_token
-  fill "$prompts/settings.json" "$run/settings.json" APP_CONFIG "$config" GH_CONFIG "$gh_config" SSH "$ssh_dir"
 
   local try=1 prompt=$run/prompt.md failed=$run/failed.out last_pr=$run/last-pr.md rc
   fill "$prompts/build.md" "$prompt" TICKET "$ticket"
   while :; do
     rc=0
+    # Filled again for every try: the filled copy is in a folder the agent could write.
+    fill "$prompts/settings.json" "$run/settings.json" APP_CONFIG "$config" GH_CONFIG "$gh_config" SSH "$ssh_dir"
     run_agent "$try" "$prompt" || rc=$?
-    restore_config
+    write_config
     local line
     if [ "$rc" -ne 0 ] && line=$(limit_line "$run/agent-$try.out"); then
       stop_for_help "$ticket" "$(reason_file "Claude's usage limit was reached during try $try of $TRIES:
@@ -592,11 +617,12 @@ The work so far is on this branch.")"
   done
 
   log "the checks pass: pushing $ticket"
+  write_config
   new_token
   local push_out
   if ! push_out=$(push_branch "$ticket"); then
     printf '%s\n' "$push_out"
-    if printf '%s' "$push_out" | grep -qi 'workflow'; then
+    if grep -qi 'workflow' <<<"$push_out"; then
       stop_for_help "$ticket" "$(reason_file "This ticket changes a workflow, which the runner's App can't push.")" "" refused
     fi
     fail "the push failed"
