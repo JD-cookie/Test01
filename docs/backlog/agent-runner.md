@@ -382,6 +382,7 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5), as the whole of "An agent t
   - its spec becomes `docs/features/NNNN-agent-runner.md`, which parts 2 and 3 edit in place, with a short operating section in `docs/devops.md` (the user's choice, over `docs/devops.md` only)
   - renamed from `agent-build` to `agent-runner`, since a spec doc is never renamed and this one covers all three parts (the user's choice)
   - each real run is recorded in the doc of the ticket it built, in that ticket's PR, since this ticket's doc is frozen once its PR merges: this replaces round 2's "follow-up docs PR" fix
+- **Approved by the user** (2026-11-22): the design is ready, but it stays `designed` until ticket 0006, which blocks it, is built (`refine-ticket` step 8). It's marked `ready` then, in its own PR. The idea row "Mark a blocked ticket `ready` before its blockers are built" would make that second step unneeded.
 - **Claude's usage limit** (2026-11-22, the user's question): a 5-hour or weekly limit would have failed all 3 tries in seconds, with a stop that blamed the checks. Added: the runner recognizes the limit, stops for help at once with the reset time, and has a test (check 3). The text `claude -p` prints at a limit isn't probed. Waiting for the reset without the user is a later backlog item (the user's choice, over doing it in this part).
 
 ## Decisions made for this ticket
