@@ -239,6 +239,7 @@ case "$1 ${2:-}" in
       modify) echo changed >>src/file.txt; exit 0 ;;
       tamper) git config remote.origin.pushurl "$STUB_T/decoy.git"; git config url."$STUB_T/decoy.git".insteadOf "$STUB_T/origin.git"; exit 0 ;;
       big) for i in $(seq 300); do printf 'L%03d %0400d\n' "$i" 0; done; exit 1 ;;
+      fences) for i in $(seq 300); do printf '%0399d\n' 0 | tr 0 '`'; done; exit 1 ;;
     esac ;;
   *) ;;
 esac
@@ -488,6 +489,17 @@ n=$(last_pr); len=$(pr_json "$n" | jq -r '.body | length')
 expect "long output and body: description under 60,000 ($len)" [ "$len" -lt 60000 ]
 expect "long output and body: starts with the reason" bash -c "jq -r .body '$T/calls/pr-$n.json' | head -n 3 | grep -q 'The checks still fail'"
 expect "long output and body: keeps the output's end" bash -c "jq -r .body '$T/calls/pr-$n.json' | grep -q '^L300 '"
+
+# Output full of ``` fences: the description is escaped before it's cut, and still fits.
+setup
+echo fail >"$T/check.mode"
+echo fences >"$T/check.mode"
+agent_commit default 'feat(server): do a thing'
+run_runner
+n=$(last_pr)
+expect "output full of fences: a draft PR opened (exit $rc)" [ "$(pr_json "$n" | jq -r .draft 2>/dev/null)" = true ]
+expect "output full of fences: under 60,000 ($(pr_json "$n" | jq -r '.body | length' 2>/dev/null))" [ "$(pr_json "$n" | jq -r '.body | length')" -lt 60000 ]
+expect "output full of fences: only the two fences around the output are left" [ "$(pr_json "$n" | jq -r .body | grep -o '```' | wc -l)" -eq 2 ]
 
 # A hanging check fails after its time limit, and the next try runs.
 setup
@@ -911,6 +923,62 @@ run_runner
 expect "a check that tampers with .git/config: the push went to origin" bash -c "git -C '$T/origin.git' log --format=%s 0042-thing | grep -q 'change 1'"
 expect "a check that tampers with .git/config: nothing reached the decoy" [ -z "$(git -C "$T/decoy.git" for-each-ref)" ]
 expect "the sandbox mounts the clone's .git read-only" bash -c "grep -A2 -x -- '--ro-bind' \$(grep -lx npm '$T/calls/'bwrap-*.args | head -n 1) | grep -qx '$XDG_DATA_HOME/jd-cookie-agent/repo/.git'"
+
+# The agent links .agent/pr.md to the runner's environment, or hard-links it to the App's key,
+# and asks for help: neither reaches the PR, the title check's command line, or a run file.
+for kind in environ key; do
+  setup
+  if [ "$kind" = environ ]; then link='ln -s /proc/self/environ .agent/pr.md'; else link="ln '$T/config/jd-cookie-agent/app.pem' .agent/pr.md"; fi
+  printf '%s\necho "Please help." >.agent/stop.md\n' "$link" >"$T/agent/default"
+  run_runner
+  n=$(last_pr)
+  expect "a linked pr.md ($kind): a draft PR with the fallback title" [ "$(pr_json "$n" | jq -r .title)" = 'chore(repo): build ticket 0042-thing' ]
+  expect "a linked pr.md ($kind): the token isn't in the PR" bash -c "! grep -qF '$FAKE_TOKEN' '$T/calls/pr-$n.json'"
+  expect "a linked pr.md ($kind): the key isn't in the PR" bash -c "! grep -q 'PRIVATE KEY' '$T/calls/pr-$n.json'"
+  expect "a linked pr.md ($kind): neither is in a run file or a command line" bash -c "! grep -rqF -e '$FAKE_TOKEN' -e 'PRIVATE KEY' '$T/state' '$T/calls/'*.args"
+  expect "a linked pr.md ($kind): the log says it was ignored" grep -q "ignoring .agent/pr.md" "$T/out"
+done
+# The agent points .git/commondir at a copy of the git folder whose config pushes to a decoy:
+# the push still goes to origin.
+setup
+git init -q --bare "$T/decoy.git"
+cat >"$T/agent/default" <<EOF
+echo change >>src/file.txt && git commit -q -am "feat(server): change"
+printf 'feat(server): do a thing\\n\\nTicket: 0042-thing (docs/tickets/0042-thing.md)\\n' >.agent/pr.md
+cp -r .git "$T/alt-git"
+git --git-dir="$T/alt-git" config remote.origin.pushurl "$T/decoy.git"
+echo "$T/alt-git" >.git/commondir
+EOF
+run_runner
+expect "a .git/commondir: the push went to origin" bash -c "git -C '$T/origin.git' log --format=%s 0042-thing | grep -q 'feat(server): change'"
+expect "a .git/commondir: nothing reached the decoy" [ -z "$(git -C "$T/decoy.git" for-each-ref)" ]
+expect "a .git/commondir: it's removed" [ ! -e "$XDG_DATA_HOME/jd-cookie-agent/repo/.git/commondir" ]
+# The agent hides an uncommitted change behind assume-unchanged: the try still fails.
+setup
+cat >"$T/agent/1" <<'EOF'
+echo x >>src/file.txt && git commit -q -am "feat(server): x"
+git update-index --assume-unchanged src/file.txt
+echo hidden >>src/file.txt
+printf 'feat(server): do a thing\n\nTicket: 0042-thing (docs/tickets/0042-thing.md)\n' >.agent/pr.md
+EOF
+agent_commit 2 'feat(server): do a thing'
+run_runner
+expect "assume-unchanged: try 1 failed before the checks" [ "$(claude_calls)/$(check_calls)" = "2/1" ]
+expect "assume-unchanged: the fix prompt lists the file" grep -q 'src/file.txt' "$T/calls/claude-2.prompt"
+# The agent makes .git/config and .agent/ symlinks to files outside the clone: the runner's
+# writes replace the links, and the targets are unchanged.
+setup
+echo keep >"$T/outside-config"; mkdir -p "$T/outside-agent"
+cat >"$T/agent/default" <<EOF
+echo change >>src/file.txt && git commit -q -am "feat(server): change"
+printf 'feat(server): do a thing\\n\\nTicket: 0042-thing (docs/tickets/0042-thing.md)\\n' >"$T/outside-agent/pr.md"
+rm .git/config && ln -s "$T/outside-config" .git/config
+rm -rf .agent && ln -s "$T/outside-agent" .agent
+EOF
+run_runner
+expect "symlinked .git/config and .agent: .git/config is a file again" [ ! -L "$XDG_DATA_HOME/jd-cookie-agent/repo/.git/config" ]
+expect "symlinked .git/config: its target is unchanged" [ "$(cat "$T/outside-config")" = keep ]
+expect "symlinked .agent: its pr.md isn't used (3 tries)" [ "$(claude_calls)" -eq 3 ]
 
 # XDG_RUNTIME_DIR unset: exit 1 with its message, no claude call.
 setup

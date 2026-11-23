@@ -25,6 +25,9 @@ set -euo pipefail
 # Git's own variables, set when this runs from a git hook, would point every git command at
 # another repo instead of the runner's clone.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR GIT_OBJECT_DIRECTORY GIT_PREFIX
+# Git may only use https (the repo's URL), whatever a config says: no ext:: or other transport
+# that runs a command. The tests set file instead, for their local origin.
+export GIT_ALLOW_PROTOCOL=${GIT_ALLOW_PROTOCOL:-https}
 
 # ---- Constants -----------------------------------------------------------------------------
 
@@ -119,6 +122,9 @@ git_c() { git -C "$clone" -c core.hooksPath=/dev/null -c core.fsmonitor=false "$
 # check wrote there (an insteadOf rewrite, a push URL, an include, a hook path) is gone. It's
 # written, not copied back, because a saved copy would be a file the agent could edit too.
 write_config() {
+  # rm first: if the agent made one a symlink, writing through it would change its target.
+  [ ! -L "$clone/.git/info" ] || rm -f "$clone/.git/info"
+  rm -f "$clone/.git/config" "$clone/.git/info/exclude"
   cat >"$clone/.git/config" <<EOF
 [core]
 	repositoryformatversion = 0
@@ -132,6 +138,31 @@ write_config() {
 EOF
   mkdir -p "$clone/.git/info"
   printf '%s\n' '.agent/' >"$clone/.git/info/exclude"
+  # .git/commondir would point git at another folder's config, objects, and refs.
+  rm -f "$clone/.git/commondir"
+  local common
+  common=$(git -C "$clone" rev-parse --path-format=absolute --git-common-dir) &&
+    [ "$(realpath "$common")" = "$(realpath "$clone/.git")" ] ||
+    fail "the clone's git folder points somewhere else ($common): not using it"
+}
+
+# Copies the agent's files (.agent/pr.md, .agent/stop.md) to $agent_files, and reads them only
+# from there. Only a regular file with one link counts: a symlink (to /proc/self/environ, say)
+# or a hard link (to the App's key) would make the runner read something else. Run it with no
+# token in the environment, since a file the runner reads can't then hold one.
+take_agent_files() {
+  rm -rf "$agent_files"
+  mkdir -p "$agent_files"
+  local f src
+  for f in pr.md stop.md; do
+    src=$clone/.agent/$f
+    if [ ! -L "$clone/.agent" ] && [ -f "$src" ] && [ ! -L "$src" ] && [ "$(stat -c %h "$src")" = 1 ]; then
+      cp "$src" "$agent_files/$f"
+    elif [ -e "$src" ] || [ -L "$src" ]; then
+      log "ignoring .agent/$f: it isn't a regular file with one link"
+      : >"$agent_files/$f.refused"
+    fi
+  done
 }
 
 # Pushes HEAD to the branch $1 without hooks: the agent can edit .husky/, and a hook it added
@@ -305,6 +336,10 @@ limit_line() {
 # Checks a title with commitlint and main's config, in the sandbox. Output goes to $2.
 title_check() {
   local title=$1 out=$2
+  # .agent/ is the agent's: if it made the folder or the file a symlink, writing through it would
+  # change something else. So both are made fresh.
+  if [ -L "$clone/.agent" ] || [ ! -d "$clone/.agent" ]; then rm -rf "$clone/.agent"; mkdir -p "$clone/.agent"; fi
+  rm -rf "$clone/.agent/commitlint.config.mjs"
   git_c show origin/main:commitlint.config.mjs >"$clone/.agent/commitlint.config.mjs" ||
     { echo "couldn't read commitlint.config.mjs on origin/main" >"$out"; return 1; }
   # shellcheck disable=SC2016 # expanded inside the sandbox
@@ -318,6 +353,9 @@ title_check() {
 # The checks after a try. Returns 0 if everything passes; otherwise leaves what failed in $1.
 checks() {
   local out=$1 head status rc=0
+  # A fresh index from HEAD: an assume-unchanged or skip-worktree flag the agent set would
+  # otherwise hide a changed file (a package.json whose check is "true") from git status.
+  git_c read-tree HEAD || { echo "git read-tree HEAD failed" >"$out"; return 1; }
   status=$(git_c status --porcelain) || { echo "git status failed" >"$out"; return 1; }
   if [ -n "$status" ]; then
     { echo "The clone has changes that aren't committed. Commit them, or remove them:"; echo "$status"; } >"$out"
@@ -332,15 +370,19 @@ checks() {
     log "npm run check failed (exit $rc)"
     return 1
   fi
-  if ! first_line "$clone/.agent/pr.md" >/dev/null; then
-    echo "The agent didn't write .agent/pr.md, or its first line (the PR's title) is empty." >"$out"
+  if ! first_line "$agent_files/pr.md" >/dev/null; then
+    if [ -e "$agent_files/pr.md.refused" ]; then
+      echo "The agent's .agent/pr.md isn't a regular file with one link (a symlink or a hard link), so it doesn't count. Write it as a plain file." >"$out"
+    else
+      echo "The agent didn't write .agent/pr.md, or its first line (the PR's title) is empty." >"$out"
+    fi
     return 1
   fi
   # One awk reads the file, with no pipe for pipefail to trip on when the body is long.
   local want="Ticket: $ticket (docs/tickets/$ticket.md)" got
-  got=$(awk 'NR > 1 && $0 !~ /^[[:space:]]*$/ { sub(/[[:space:]]+$/, ""); print; exit }' "$clone/.agent/pr.md")
+  got=$(awk 'NR > 1 && $0 !~ /^[[:space:]]*$/ { sub(/[[:space:]]+$/, ""); print; exit }' "$agent_files/pr.md")
   local size
-  size=$(node -e 'const fs = require("fs"); const t = fs.readFileSync(process.argv[1], "utf8"); const i = t.indexOf("\n"); process.stdout.write(String(i < 0 ? 0 : [...t.slice(i + 1)].length))' "$clone/.agent/pr.md")
+  size=$(node -e 'const fs = require("fs"); const t = fs.readFileSync(process.argv[1], "utf8"); const i = t.indexOf("\n"); process.stdout.write(String(i < 0 ? 0 : [...t.slice(i + 1)].length))' "$agent_files/pr.md")
   if [ "$size" -gt "$DESC_MAX" ]; then
     echo "The PR body in .agent/pr.md has $size characters: keep it under $DESC_MAX (GitHub's limit is 65,536). Put long output in the ticket doc's Delivery and review instead." >"$out"
     return 1
@@ -350,7 +392,7 @@ checks() {
     return 1
   fi
   log "checking the PR's title with commitlint"
-  if ! title_check "$(first_line "$clone/.agent/pr.md")" "$out.title"; then
+  if ! title_check "$(first_line "$agent_files/pr.md")" "$out.title"; then
     { echo "The PR title in .agent/pr.md fails commitlint, with main's config:"; cat "$out.title"; } >"$out"
     log "the title check failed"
     return 1
@@ -378,6 +420,10 @@ stop_for_help() {
   local branch=$1 reason=$2 output=${3:-} refused=${4:-}
   mkdir -p "$run"
   log "stopping for help: $(head -n 1 "$reason")"
+  # The agent's files are read with no token in the environment (see take_agent_files). After a
+  # try they're already copied; on the way from find_work they aren't yet.
+  drop_token
+  [ -d "$agent_files" ] || take_agent_files
   write_config
   new_token
   git_c fetch -q origin || fail "couldn't fetch origin"
@@ -426,12 +472,12 @@ stop_for_help() {
   local title_file=$run/pr-title.txt body_file=$run/pr-body.txt pr_body=$run/agent-pr-body.txt
   : >"$pr_body"
   local t
-  if t=$(first_line "$clone/.agent/pr.md") && title_check "$t" "$run/title-check.out"; then
+  if t=$(first_line "$agent_files/pr.md") && title_check "$t" "$run/title-check.out"; then
     printf '%s\n' "$t" >"$title_file"
-    tail -n +2 "$clone/.agent/pr.md" >"$pr_body"
+    tail -n +2 "$agent_files/pr.md" >"$pr_body"
   else
     printf 'chore(repo): build ticket %s\n' "$branch" >"$title_file"
-    [ -f "$clone/.agent/pr.md" ] && cp "$clone/.agent/pr.md" "$pr_body"
+    [ ! -f "$agent_files/pr.md" ] || cp "$agent_files/pr.md" "$pr_body"
   fi
   printf '%s\n' "$pushed_note" >"$run/push-note.txt"
   [ -n "$output" ] && [ -f "$output" ] || output=/dev/null
@@ -449,13 +495,14 @@ stop_for_help() {
       "Fix what is needed by hand, then mark this PR ready for review.\n";
     let output = fs.readFileSync(outputF, "utf8").trim();
     let body = fs.readFileSync(bodyF, "utf8").trim();
-    const fence = s => "\n## Output\n\n```\n" + s.replace(/```/g, "` ` `") + "\n```\n";
+    // Fences in the output are escaped before anything is measured or cut, so the cut fits.
+    const fence = s => "\n## Output\n\n```\n" + s + "\n```\n";
     const bodyPart = s => "\n## The agent’s PR description\n\n" + s + "\n";
     const compose = (o, b) => head + (o ? fence(o) : "") + (b ? bodyPart(b) : "");
     // Room for the output and the body: what is left after the head and the wrappers,
     // with space for the notes that say a text was cut.
     let left = +max - compose("x", "x").length - 400;
-    let o = output, b = body;
+    let o = output.replace(/```/g, "` ` `"), b = body;
     if (o.length + b.length > left) {
       const half = Math.floor(left / 2);
       if (o.length <= half) b = cutStart(b, left - o.length);
@@ -591,14 +638,15 @@ build() {
     fill "$prompts/settings.json" "$run/settings.json" APP_CONFIG "$config" GH_CONFIG "$gh_config" SSH "$ssh_dir"
     run_agent "$try" "$prompt" || rc=$?
     write_config
+    take_agent_files
     local line
     if [ "$rc" -ne 0 ] && line=$(limit_line "$run/agent-$try.out"); then
       stop_for_help "$ticket" "$(reason_file "Claude's usage limit was reached during try $try of $TRIES:
 $line
 The work so far is on this branch.")"
     fi
-    if [ -s "$clone/.agent/stop.md" ]; then
-      cp "$clone/.agent/stop.md" "$run/stop.md"
+    if [ -s "$agent_files/stop.md" ]; then
+      cp "$agent_files/stop.md" "$run/stop.md"
       stop_for_help "$ticket" "$run/stop.md"
     fi
     if [ "$rc" -ne 0 ]; then
@@ -611,7 +659,7 @@ The work so far is on this branch.")"
     if [ "$try" -ge "$TRIES" ]; then
       stop_for_help "$ticket" "$(reason_file "The checks still fail after $TRIES tries.")" "$failed"
     fi
-    if [ -f "$clone/.agent/pr.md" ]; then cp "$clone/.agent/pr.md" "$last_pr"; else echo "(missing)" >"$last_pr"; fi
+    if [ -f "$agent_files/pr.md" ]; then cp "$agent_files/pr.md" "$last_pr"; else echo "(missing)" >"$last_pr"; fi
     try=$((try + 1))
     fill "$prompts/fix-checks.md" "$prompt" TICKET "$ticket" TRY "$try" OUTPUT "@$failed" PR_MD "@$last_pr"
   done
@@ -627,8 +675,8 @@ The work so far is on this branch.")"
     fi
     fail "the push failed"
   fi
-  first_line "$clone/.agent/pr.md" >"$run/pr-title.txt"
-  tail -n +2 "$clone/.agent/pr.md" >"$run/pr-body.txt"
+  first_line "$agent_files/pr.md" >"$run/pr-title.txt"
+  tail -n +2 "$agent_files/pr.md" >"$run/pr-body.txt"
   open_pr "$ticket" "$run/pr-title.txt" "$run/pr-body.txt" false "$LABEL_RUN"
 }
 
@@ -648,6 +696,7 @@ exec > >(tee -a "$log_file") 2>&1
 ls -1 "$state/logs" | sort | head -n -"$KEEP_LOGS" | while read -r f; do rm -f "$state/logs/$f"; done
 run=$state/runs/$stamp
 mkdir -p "$run"
+agent_files=$run/agent-files
 
 if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
   fail "XDG_RUNTIME_DIR isn't set. Run this from a login session (or a systemd user service), which sets it."
