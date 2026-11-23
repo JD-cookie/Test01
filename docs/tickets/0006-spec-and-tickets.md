@@ -1,6 +1,6 @@
 # Keep the spec separate from the ticket history
 
-Status: **built**, 2026-11-22, ticket 0006, the first ticket built in the layout it sets up. Marked ready on 2026-11-20 in PR #15.
+Status: **built**, 2026-11-22, in PR #18, ticket 0006, the first ticket built in the layout it sets up. Marked ready on 2026-11-20 in PR #15.
 
 Spec docs changed: [docs/README.md](../README.md), [docs/devops.md](../devops.md), [0001-accounts.md](../features/0001-accounts.md), [0002-rate-limiting.md](../features/0002-rate-limiting.md), [0003-refine-ticket-skill.md](../features/0003-refine-ticket-skill.md).
 
@@ -204,3 +204,62 @@ Refined 2026-11-19 by Claude Code (claude-opus-5-5).
 - **An index, `docs/tickets/README.md`** (Q4, the user, 2026-11-19): one row per built ticket, with its PR and the spec docs it changed.
 - **This PR converts 0003, and gives 0001 and 0002 Changes lists** (Q5, the user, 2026-11-19), so every spec doc follows the layout from the start.
 - **Only 0003 is converted; anything else built under the old layout stops for the user** (Q7, Q8, and Q9, the user, 2026-11-19 and 2026-11-20). Q7 had this PR convert any such ticket, with a stub; Q8 kept the conversion in this PR, not in the skills; Q9 dropped it, with its pause and per-case checks. Rounds 3 to 7 went mostly to that case, which doesn't exist: the user starts the agents, and builds this ticket next. Writing it out would have cost more than handling it once, if ever.
+
+## Delivery and review
+
+Built on branch `0006-spec-and-tickets`, claimed with `scripts/ticket.sh claim 0006-spec-and-tickets claude-00cb8987` (claim `8a067552`), by Claude Code (claude-opus-5-5), in PR #18.
+
+**What changed from the version marked ready:**
+- "What changes in this ticket's own PR": the runner's three parts were already fitted to this layout by PR #17, which merged first, so this PR changed only the status lines of 0004 and the container image. The container image changes `docs/devops.md` only, so that's the spec doc its line names.
+- `refine-ticket` step 9.1's "Blocked by" check, prose only before, now has a command, so check 1 could run the skill's own text. It prints `not built: <title>` with the reason, or nothing.
+- 0003's check 2 line said "no refinement has run them yet", which would be wrong in a frozen doc. So the result of the pending note went in that line as well as in its "Changed after delivery" note. Both are part of the one change named in "Processing".
+- `docs/tickets/README.md` names `docs/backlog/` as plain text rather than as a link. The index isn't a ticket doc, but its link was the only one check 3's checker flagged, and plain text keeps the folder stable either way.
+
+**Acceptance checks:**
+1. **Pass.** The command blocks of `refine-ticket` step 9 were cut from the skill as written and run in a scratch clone whose `origin` is a local bare repo. `main` there had this branch's docs, plus `docs/tickets/0007-x.md` and an index row for "Thing X":
+   - step 9.1's number command printed `0008`
+   - step 9.5's check printed `taken on main` for `0007`, and nothing for `0009`
+   - the "Blocked by" check printed nothing for "Thing X" (row gone, in the index, not in the Features table), and nothing for 0001 (in the Features table)
+   - it printed `not built: Thing Z (not in docs/tickets/README.md or the Features table)` for an unknown item
+   - after a row for "Thing X" was added back to the backlog, it printed `not built: Thing X (its row is still in the backlog)`
+2. **Pass.** `grep -rnE "features/" AGENTS.md docs .agents --include=*.md --exclude-dir=tickets`: no hit tells anyone to move a ticket's doc into `features/`. The hits, by kind:
+   - **links to spec docs:** `docs/README.md` (the Features table), `docs/devops.md:21` and `:47`, `docs/backlog/README.md` (the 0004, Password reset, Email verification, HTTPS, and Login challenge rows, and the ticket commands row), and `0004-delete-expired-sessions.md:7` and `:29`
+   - **what a spec doc is, or an instruction to write or edit one:**
+     - `AGENTS.md:13` and `:71`
+     - `docs/README.md:8`, `:46` and `:54`
+     - `docs/backlog/README.md:26` and `:27`
+     - `next-ticket/SKILL.md:39` and `:42`
+     - `refine-ticket/SKILL.md:10`
+     - the runner's three docs, which name the runner's spec doc
+     - the status lines of 0004 and the runner's parts
+   - **number sources and search places:** `docs/backlog/README.md:21`, `refine-ticket/SKILL.md:34`, `:153`, `:160` and `:185`, and `0003-refine-ticket-skill.md:37`, `:84` and `:88`
+3. **Pass.** A link checker in a scratch directory finds every relative link in `docs/`, `AGENTS.md`, and `.agents/`, outside code, and checks:
+   - that it resolves to a file, and to a heading when it has a `#…`, using GitHub's heading anchors
+   - that each link in `docs/tickets/` is stable
+   - for each permalink: `git merge-base --is-ancestor`, `git cat-file -e`, and the heading in that blob
+
+   On this branch it printed `22 files, 0 problems`. On a copy with seven bad links planted in a ticket doc, it reported all seven: a section link to a spec doc, a relative link to the backlog, a missing file, a missing heading, a permalink to a path the commit doesn't have, a permalink to a missing heading, and a non-permalink link to the repo. The permalinks this PR added point to:
+   - 77e5333, for 0004's Readiness review
+   - 604e8e2, for `reviewers.md`
+   - 41516db, for 0003's spec as built
+4. **Pass.** `git diff --color=always --color-moved=zebra origin/main...HEAD -- docs/features/0003-refine-ticket-skill.md docs/tickets/0003-refine-ticket-skill.md`, read by a script that counts moved and plain lines:
+   - 64 removed and 64 added lines show as moved, the two history sections
+   - the plain lines in those sections are three on each side: check 2 (the 0004 permalink and the pending result), the round 1 bullet (the `reviewers.md` permalink), and "Changed after delivery" (the result)
+   - the other plain lines are the spec updates "Processing" lists, the Changes section, and the ticket doc's title, status, and Spec docs changed lines
+
+   0003's spec names `docs/tickets/` in step 3 and in step 9 (items 1, 4 and 5).
+   - All five spec docs (`docs/README.md`, `docs/devops.md`, 0001, 0002, 0003) end with a Changes line for 0006. This doc's Spec docs changed line and its index row list the same five.
+   - `docs/README.md`'s Changes has 0003's line, and 0003's ticket doc and index row list `docs/README.md`.
+5. **Pass,** after the last merge of `main` (none was needed: `main` was at 604e8e2 throughout):
+   - `git ls-remote --heads origin 'refs/heads/[0-9][0-9][0-9][0-9]-*'` printed only `8d6e84c… refs/heads/0006-spec-and-tickets`
+   - `grep -lnE '^## (Readiness review|Decisions made for this ticket|Delivery and review)[[:space:]]*$' docs/features/*.md` printed nothing (exit 1)
+   - `git log origin/main --format= --name-only --no-renames --diff-filter=A -- docs/features | grep -oE '[0-9]{4}-[^/]+\.md$' | sort -u` printed `0001-accounts.md`, `0002-rate-limiting.md`, `0003-refine-ticket-skill.md`. On `HEAD` too.
+6. **Pass.** This doc is in `docs/tickets/`, `git diff --name-status origin/main...HEAD -- docs/features` shows only `M` for the three existing docs (no file added), and the index row has `#18`.
+7. Runs after this PR merges: the next ticket built records it in its own "Delivery and review", with a link to this doc.
+
+`npm run check` passed (server typecheck and 23 tests, app typegen, lint, and typecheck).
+
+**Review (PR #18):** filled in as Qodo's findings come.
+
+**Rules, skills, or reviewer context:** none to change beyond this ticket. Check 3's link checker would be worth keeping: it's the "link checker in CI" left out of scope, and the known gap in "Security and configuration".
+
