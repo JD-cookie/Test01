@@ -162,22 +162,23 @@ take_agent_files() {
   for f in pr.md stop.md; do
     # node opens the file without following a symlink (O_NOFOLLOW), checks the file it opened
     # (fstat), and reads from that same descriptor, so nothing can be swapped in between a
-    # check and the copy. Exit 2: there's no such file.
+    # check and the copy. O_NONBLOCK: opening a FIFO doesn't wait for a writer, and fstat then
+    # refuses it; timeout is a last guard against anything else that blocks. Exit 2: no file.
     rc=0
-    node -e '
+    timeout 30s node -e '
       const fs = require("fs"), path = require("path");
       const [dir, name, dest] = process.argv.slice(1);
       let d;
       try { d = fs.lstatSync(dir); } catch { process.exit(2); }
       if (!d.isDirectory()) process.exit(1);
       let fd;
-      try { fd = fs.openSync(path.join(dir, name), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW); }
+      try { fd = fs.openSync(path.join(dir, name), fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK); }
       catch (e) { process.exit(e.code === "ENOENT" ? 2 : 1); }
       const s = fs.fstatSync(fd);
       if (!s.isFile() || s.nlink !== 1) process.exit(1);
       fs.writeFileSync(dest, fs.readFileSync(fd));
     ' "$clone/.agent" "$f" "$agent_files/$f" || rc=$?
-    if [ "$rc" -eq 1 ]; then
+    if [ "$rc" -ne 0 ] && [ "$rc" -ne 2 ]; then
       rm -f "$agent_files/$f"
       log "ignoring .agent/$f: it isn't a regular file with one link"
       : >"$agent_files/$f.refused"

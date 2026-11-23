@@ -938,6 +938,14 @@ for kind in environ key; do
   expect "a linked pr.md ($kind): neither is in a run file or a command line" bash -c "! grep -rqF -e '$FAKE_TOKEN' -e 'PRIVATE KEY' '$T/state' '$T/calls/'*.args"
   expect "a linked pr.md ($kind): the log says it was ignored" grep -q "ignoring .agent/pr.md" "$T/out"
 done
+# The agent leaves .agent/pr.md as a FIFO with no writer: the runner doesn't wait on it, and
+# goes on to stop for help.
+setup
+printf 'mkfifo .agent/pr.md\necho "Please help." >.agent/stop.md\n' >"$T/agent/default"
+start=$(date +%s); run_runner; took=$(( $(date +%s) - start ))
+expect "a FIFO pr.md: the run finished at once, without waiting on it (exit $rc, ${took}s)" [ "$rc/$((took < 20))" = "0/1" ]
+expect "a FIFO pr.md: a draft PR with the fallback title" [ "$(pr_json "$(last_pr)" | jq -r .title 2>/dev/null)" = 'chore(repo): build ticket 0042-thing' ]
+expect "a FIFO pr.md: the log says it was ignored" grep -q "ignoring .agent/pr.md" "$T/out"
 # The agent replaces .git with a symlink to another git folder: the runner stops, and doesn't
 # write that folder's config.
 setup
