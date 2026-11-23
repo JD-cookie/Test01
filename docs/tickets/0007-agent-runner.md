@@ -1,6 +1,6 @@
 # A runner that builds a ready ticket into a PR
 
-Status: **built**, 2026-11-22, ticket 0007: part 1 of 3, the runner run by hand. Marked ready on 2026-11-22 in PR #19.
+Status: **built**, 2026-11-22, in PR #20, ticket 0007: part 1 of 3, the runner run by hand. Marked ready on 2026-11-22 in PR #19.
 
 Spec docs changed: [0007-agent-runner.md](../features/0007-agent-runner.md) (new), [docs/devops.md](../devops.md), [docs/README.md](../README.md).
 
@@ -405,3 +405,59 @@ Decided by the user on 2026-11-19:
 - **Keeping credentials from the agent, for now:** Claude's permission rules deny the secret folders, the checks run in `bwrap` with no network, the token is never in the agent's or the checks' environment, and pushes run no hooks. The agent can still read the files with an allowed command: a known gap. The other options, both for later backlog items: the agent as its own Linux user (the OS hides every credential, but it needs `sudo` once and a `claude login` as that user), and a credential broker, a small service as another user that holds the key and does only the runner's actions (it hides the App key, but not the user's `gh` token or deploy key, and it's the most new code). `claude` can't run in `bwrap` on this machine, so the sandbox can't hold the agent itself.
 - **Docs on the web:** `WebSearch`, and `WebFetch` for the documentation sites in "The agent". Agents need API docs while building, and `app/AGENTS.md` requires Expo's. An open `WebFetch` would add any site's text as input, and with the known gap above, a way to send a credential out.
 - **Split into three parts:** this one, the review rounds, and the timer, each its own ticket and PR.
+
+## Delivery and review
+
+Built on branch `0007-agent-runner`, claimed with `scripts/ticket.sh claim 0007-agent-runner claude-00cb8987` (claim `66b1d510`), by Claude Code (claude-opus-5-5), in PR #20. It's the first ticket built in ticket 0006's layout. This doc moved to `docs/tickets/`, and the runner's spec is a new spec doc, `docs/features/0007-agent-runner.md`, with a Changes section. Its Features row, the index row, and Changes lines in `docs/README.md` and `docs/devops.md` are in this PR. That's ticket 0006's acceptance check 7, which [0006's doc](0006-spec-and-tickets.md) left to the next build.
+
+**What changed from the version marked ready:**
+- **Opening a PR is `gh api`, not `gh pr create`:** one `POST /pulls` with the title, body, and draft state, then `POST /issues/<n>/labels`. Every GitHub call is then the same kind, and the tests' `gh` stub stays small. The cost: a crash between the two calls leaves a draft whose description says why, but without `needs-help`. The next run sees an open PR, and leaves it alone. "Stopping for help" and check 2 say so.
+- **A new token for every phase,** as "One run" step 3 says, so check 5's "clock moved past the hour" case needs no `date` stub. It checks instead that a token is made after the agent's last run and before the PR.
+- **More test-only variables:** `AGENT_RUN_MACHINE_ID_FILE` (check 4 needs a stub machine id), plus `AGENT_RUN_AGENT_TIME`, `AGENT_RUN_CHECK_TIME`, `AGENT_RUN_TITLE_TIME`, and `AGENT_RUN_KILL_AFTER` (check 3 shortens the time limits). They're listed in "No new settings".
+- **The token's length:** the App's real token was 390 characters with two dots, not "about 520". The runner treats it as opaque, so nothing changed. The tests' fake token still has 520 characters.
+- **`check` also looks for `git` and `timeout`,** which the runner needs too.
+- **The tests need `jq`,** on `ubuntu-24.04` runners and on this machine. It's for the `gh` stub's `--jq`.
+- **Git's hook variables are cleared:** the runner clears `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_INDEX_FILE` at the start, and the tests clear every `GIT_*` variable but `GIT_EXEC_PATH`. See "Found while building".
+
+**`LIMIT_PATTERNS`:** `usage limit reached`, `hit your limit`, and `limit reached.*resets`, from the builder's memory of Claude Code's messages, not from a run. Older versions printed `Claude AI usage limit reached|<time>`, and newer ones something like "You've hit your limit · resets 5pm" or "5-hour limit reached ∙ resets 3pm". Not verified: no run here reached a limit. The first real limit shows the true text in the run's log, and the patterns can be fixed then.
+
+**Acceptance checks:**
+1. to 6. **Pass,** in `scripts/test/agent-run.test.sh`, run by `npm run test:scripts`. It printed `ok 1` to `ok 6`, and `ok 6 - the agent's limits, with a real bwrap`, locally (about 2 minutes) and in the pre-commit hook. In CI, the real-bwrap cases print `skip 6` if the runner has no working `bwrap`. Inside the sandbox, as the runner's own checks run them, those cases print `skip 6` and the rest pass (the "real bwrap" case runs the whole suite that way).
+
+   The tests can fail: three broken copies of the runner, run in scratch folders, were each caught.
+   - Without `--unshare-net`: check 6 reported the missing option, and the real `bwrap`'s network probe failed.
+   - Pushing with hooks: check 6 found that the agent's `pre-push` hook ran.
+   - Ignoring the usage limit: check 3's four limit cases failed.
+7. **Pass.** On the owner's machine, 2026-11-23, `scripts/agent-run.sh check` printed `ok` for all ten tools, `ok: bwrap hides a masked folder`, `ok: bwrap has no network (only lo)`, `ok: …/app.pem exists, with mode 600`, `ok: …/app.env sets APP_CLIENT_ID`, and `ok: made a token for the App`, and exited 0. Nothing changed on GitHub.
+
+   Before that, a token from `scripts/agent-token.sh` read the repo and `users/jd-cookie-agent[bot]` (id 358547770). Its value was never printed, only its length and prefix.
+8. **Pass.** `npm run check` passed locally: the server's 23 tests, the app's typegen, lint, and typecheck, and the scripts' tests. CI runs the `server`, `app`, and `scripts` jobs on this PR. actionlint is clean.
+
+   With a real `bwrap`, the repo's `npm run check` also passed inside the runner's sandbox (23 of 23 server tests, no network, the secret folders hidden).
+9. After this PR merges, with the owner: the real run by hand, on a second small ticket. It's recorded in that ticket's doc, with a link back here.
+
+**Tasks for the user:**
+- 1 and 2 (the App, its key and client ID): done, shown by check 7.
+- 4 (the ruleset on `main`): done. `gh api repos/JD-cookie/Test01/rules/branches/main` lists `deletion`, `non_fast_forward`, and `pull_request`, and ruleset 27607386 is `active`, on the default branch. Its `bypass_actors` reads `[]`, but the owner's token has no Administration permission, so the owner is asked to confirm "Bypass list: empty" on the ruleset's page.
+- 3 (Qodo's bot reviews) shows on the runner's first real PR.
+- 5 (the second small ticket) comes after this PR merges.
+
+**Probes:**
+- **Claude's permission rules,** in a scratch repo with `claude -p --settings`: `Bash(git status:*)` allowed `git status`. `Bash(git push:*)` and `Bash(curl:*)` denied those commands. `Read(//<path>/**)` denied reading the folder, both with the Read tool and with `cat`. `echo` ran with no rule, as a read-only command. So the settings use the `:*` form and a `/` before each absolute path.
+- **The repo's checks in the sandbox,** as above.
+
+**Found while building:**
+- **Git's hook variables sent the tests' git commands to the real repo.** The first commit ran the scripts' tests in the pre-commit hook. Git sets `GIT_DIR` and `GIT_INDEX_FILE` for a hook, so the tests' `git init` and `git commit` of their seed repo acted on this repo instead. It did two things:
+  - It made four `chore: seed` commits on the local branch, and put the seed's files in the index.
+  - It set `core.bare = true` in the shared `.git/config`, which breaks the owner's main checkout.
+
+  Nothing was pushed: `origin` still had the claim commit. The runner's own clone failed, so it didn't run.
+
+  Repaired by setting `core.bare` back to `false` (the main checkout then showed only the owner's own change) and resetting the branch to the claim commit, mixed (`git reset cc01693`), which keeps the files on disk. Fixed: the tests clear every `GIT_*` variable except `GIT_EXEC_PATH`, and refuse to run if a new empty folder looks like a repo. The runner clears `GIT_DIR`, `GIT_WORK_TREE`, and `GIT_INDEX_FILE`. Tested by running the suite from a pre-commit hook in a throwaway repo: it passed, and that repo got only its own commit.
+- **In the hook, the sandbox's empty `/tmp` hid `node_modules`:** the hook's snapshot links it from the checkout, which here is under `/tmp`. The real-bwrap case now binds a linked `node_modules` read-only. The runner's clone has its own `node_modules`, so the runner isn't affected.
+- **`timeout` can't run a shell function,** so the sandbox is a command array (`SANDBOX`), not a function.
+
+**Review (PR #20):** filled in as the reviews come.
+
+**Rules, skills, or reviewer context:** a suggestion for the owner, not changed here: `AGENTS.md` could tell anyone writing a script or test that runs `git` in other repos to clear git's hook variables first, since the pre-commit hook runs tests with them set.
+
