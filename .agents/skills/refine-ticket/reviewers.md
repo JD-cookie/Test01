@@ -45,3 +45,5 @@ One row per reviewer per round. **Kept** findings were fixed in the doc or turne
 | 2026-11-20 | Keep the spec separate from the ticket history | 6 | opencode | ollama-cloud/kimi-k3.1-pro | 5 | 0 | 0 |
 | 2026-11-20 | Keep the spec separate from the ticket history | 7 | Codex | gpt-6.1-sol | 1 | 0 | 0 |
 | 2026-11-20 | Keep the spec separate from the ticket history | 7 | opencode | ollama-cloud/kimi-k3.1-pro | 2 | 0 | 1 |
+| 2026-11-24 | Mark a blocked ticket `ready` before its blockers are built | 1 | Codex | gpt-6.1-sol | 2 | 0 | 0 |
+| 2026-11-24 | Mark a blocked ticket `ready` before its blockers are built | 1 | opencode | ollama-cloud/deepseek-v4-pro | 3 | 1 | 0 |
