@@ -50,7 +50,9 @@ self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
 root=$(git rev-parse --show-toplevel) || { echo "ticket: not inside a git checkout" >&2; exit 2; }
 cd "$root"
 
-die() { code=$1; shift; echo "ticket: $*" >&2; exit "$code"; }
+# printf, not echo: a message can hold a blocker's title from the backlog, and dash's echo would
+# turn a backslash in it (\n, \c) into something else.
+die() { code=$1; shift; printf 'ticket: %s\n' "$*" >&2; exit "$code"; }
 
 # Prints "<NNNN-slug> <status>" for each numbered row of main's backlog. Callers capture its output
 # with $(…) and check its exit code: piped straight into another command, a failed read would look
@@ -178,7 +180,7 @@ ready_tickets() {
     esac
     waits=$(waiting_on "$slug") || exit $?
     if [ -n "$waits" ]; then
-      echo "$slug  waiting on: $waits"
+      printf '%s\n' "$slug  waiting on: $waits"
     elif ! git cat-file -e "origin/main:docs/backlog/$slug.md" 2>/dev/null; then
       echo "$slug  not claimable: docs/backlog/$slug.md is missing on main"
     elif printf '%s\n' "$branches" | grep -qx -- "$slug"; then

@@ -38,7 +38,8 @@ Status: built (2026-11-25).
 ### Reading the blockers
 
 The blockers are read from a row's Notes cell (the fifth column, `awk -F'|'` field 6) on `origin/main`:
-- Only a cell that starts `Blocked by: ` (after spaces) has blockers.
+- Only a cell that starts `Blocked by: ` (after spaces), or is exactly `Blocked by:`, has blockers. A cell that mentions "Blocked by" later has none.
+- **A cell that starts "Blocked by" spelled another way** (`Blocked By: A`, `Blocked by:A`, `blocked by A`) counts as one unknown blocker, shown as `(a "Blocked by" not written as "Blocked by: <title>; <title>")` (after Qodo's review: see "Delivery and review").
 - The list runs to the first `. ` (a period and a space) or to the end of the cell, whichever comes first, and a trailing `.` is dropped.
 - Titles are separated by `; `, with spaces trimmed. A title is plain text, as the backlog's rows write them today. A title can't contain `; ` or `. `.
 - **An empty list or an empty entry** (`Blocked by: .`, `Blocked by: A; ; B`, or `Blocked by:` and nothing else) counts as one unknown blocker, shown as `(an empty entry in "Blocked by")`. So a row whose list can't be read is never claimable.
@@ -90,7 +91,7 @@ ticket: the claim is yours, but on main NNNN-<slug> is now waiting on: <title>. 
 
 - **Who triggers it:** whoever runs `scripts/ticket.sh` (the owner, an agent, or the runner). It reads `main` and the branches on `origin`, as now. Only the owner marks a ticket `ready`, in a PR the owner merges, so only the owner can add or remove a blocker on `main`.
 - **A blocker read wrongly** would let a ticket be built too early, so every doubt counts as not built: an unknown title, a list that can't be read. The worst case is a ticket that waits until the owner fixes its row.
-- **`origin` or `main` can't be read:** as now, exit 4 or exit 2 with the message. A failed read of `docs/tickets/README.md` or `docs/README.md` when they're needed is exit 2 ("couldn't read …"), never an empty list, so a failure can't make blockers look built.
+- **`origin` or `main` can't be read:** as now, exit 4 or exit 2 with the message. A failed read of `docs/tickets/README.md` or `docs/README.md` when they're needed is exit 2 ("couldn't read …"), or exit 4 in the check after a won claim, never an empty list, so a failure can't make blockers look built.
 - **Logging:** `list` and the claim messages say what a ticket waits on. Nothing else is logged.
 - **The project's rules:** rule 3, the docs change in the same PR (the Implementation map lists them). Rules 1, 2, 4, and 5 don't apply: no attempt limits, no server state, no versions, no workflows.
 - **Known gaps:**
@@ -125,7 +126,7 @@ ticket: the claim is yours, but on main NNNN-<slug> is now waiting on: <title>. 
 
 Checks 1 to 14 are the new behavior, 15 and 16 its other callers, and 17 to 22 the existing behavior, tested for the first time (the owner's choice). All are tests in `scripts/test/ticket.test.sh` unless they say otherwise. Each runs `scripts/ticket.sh` in a scratch clone of a scratch bare `origin`, whose `main` has a backlog, `docs/tickets/README.md`, and `docs/README.md` the test writes. What shows it passed: `npm run test:scripts` prints `ok` for each, in the pre-commit hook and in CI's `scripts` job.
 
-1. **Waiting:** a `ready` row `0012-thing` blocked by an item whose row is still in the backlog: `list` prints `0012-thing  waiting on: <title>`; `claim next` exits 3 and creates no branch on `origin`; `claim 0012-thing` exits 2 with the message above and creates no branch, local or on `origin`.
+1. **Waiting:** a `ready` row `0012-thing` blocked by an item whose row is still in the backlog: `list` prints `0012-thing  waiting on: <title>`; `claim next` exits 3 and creates no branch on `origin`; `claim 0012-thing` exits 2 with the message above and creates no branch, local or on `origin`. A blocker titled `Use \n and \c here` is printed as it is, by `list` and in `claim`'s message (after the owner's review: see "Delivery and review").
 2. **Built:** the same row, with its blocker's row removed and the blocker in `docs/tickets/README.md`: `list` prints `0012-thing  ready`, and `claim next` claims it (exit 0, its branch on `origin` is the claim commit). With the blocker in `docs/README.md`'s Features table instead, the same.
 3. **Two blockers, one built:** `list` names only the one not built.
 4. **Unknown:** a blocker in neither the backlog nor the built lists: `list` prints `waiting on: <title> (not in the backlog or built)`, and `claim next` skips it.
@@ -135,9 +136,9 @@ Checks 1 to 14 are the new behavior, 15 and 16 its other callers, and 17 to 22 t
 8. **Linked blocker row:** a blocker whose row's Item is `[<title>](<slug>.md)` is found as not built.
 9. **No index:** `main` with no `docs/tickets/README.md` and no blocked rows: `list` and `claim next` work as before.
 10. **Failed read:** a `ready` row blocked by a title with no row in the backlog, and no `docs/tickets/README.md` on `main`: `list` exits 2 with `couldn't read docs/tickets/README.md`, and prints no `ready` line.
-11. **Blocker added after the claim:** after a won claim, `main` gets a commit that adds an unbuilt blocker to the row. `scripts/ticket.sh verify 0012-thing`, which runs the same `still_ready` check, exits 5 with the message above.
+11. **Blocker added after the claim:** after a won claim, `main` gets a commit that adds an unbuilt blocker to the row. `scripts/ticket.sh verify 0012-thing`, which runs the same `still_ready` check, exits 5 with the message above. If the new blocker has no row and `main` has no `docs/tickets/README.md`, so the blockers can't be read, it exits 4, and the branch stays.
 12. **Unchanged cases:** a claimed ready ticket, a missing design doc, and a mismatched number still print what they print today.
-13. **Empty entries:** `Blocked by: .` and `Blocked by: A; ; B` (A and B built): `list` prints `waiting on: (an empty entry in "Blocked by")`, and `claim next` skips the ticket.
+13. **Empty entries and a misspelled "Blocked by":** `Blocked by: .` and `Blocked by: A; ; B` (A and B built): `list` prints `waiting on: (an empty entry in "Blocked by")`. `Blocked By: A.`, `Blocked by:A`, and `blocked by A and B.`: `list` prints `waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")`. `claim next` skips them all.
 14. **Waiting and claimed:** a waiting ticket whose branch is on `origin`: `list` prints its waiting line, and `claim` of it exits 2, not 3.
 15. **The runner** (`scripts/test/agent-run.test.sh`): with its seed's ticket waiting on a blocker whose row is in the seed's backlog (`designed`), and no `docs/tickets/README.md` in the seed, the run logs `no ready ticket`, exits 0, and calls neither `claude` nor `claim`.
 16. **`refine-ticket`, by reading:** steps 8 and 9.1 say what "Behavior" says. Shown by the PR's diff and the reviewers' reading.
@@ -225,6 +226,13 @@ Built on branch `0008-ready-before-blockers`, claimed by the runner (`runner-49e
 1. **Bug: a misspelled "Blocked by" let a ticket be built early.** `waiting_on()` read blockers only after exactly `Blocked by: `, so `Blocked By: A`, `Blocked by:A`, or `blocked by A` read as no blockers, against "every doubt counts as not built". Fixed: a cell that starts "Blocked by" in any other spelling counts as one unknown blocker, `(a "Blocked by" not written as "Blocked by: <title>; <title>")`. Test: check 13 has the three spellings.
 2. **Low: the index row said `(open)`, not the PR.** Fixed: `#22`.
 3. **Bug: a failed read after a won claim exited 2.** `still_ready` passed on `waiting_on()`'s exit 2, which tells callers nothing was made, and makes `claim next` try the next ticket, though the claim branch exists. Fixed: exit 4, `the claim is yours, but the blockers of <slug> on main couldn't be read (see above). Run: scripts/ticket.sh verify <slug>`. Test: check 11's second case (a blocker with no row, and no `docs/tickets/README.md`) exits 4.
+
+**Independent review** (2026-11-25, at the owner's request), on 47e5382: Codex (gpt-6.1-sol) and opencode (ollama-cloud/deepseek-v4-pro), separately, each in a read-only clone of the branch, which was unchanged afterwards. 6 findings, after one found by both (Codex 2 is opencode 1). All checked against the code and fixed, each code fix with a test that fails when it's undone in a scratch copy:
+1. **Codex (blocking): dash's `echo` changed a title with a backslash.** `list` printed the waiting line with `echo`, and `die` its messages, and `/bin/sh` is dash, whose `echo` turns `\n` into a new line and stops at `\c`. A blocker titled `Use \n here` printed two lines. Checked with `dash -c`. Fixed: both use `printf '%s\n'`. Test: check 1 has a title with `\n` and `\c`, printed as it is by `list` and in `claim`'s message.
+2. **Codex (blocking) and opencode (minor): the docs still said a cell not starting `Blocked by: ` has no blockers,** after Qodo's fix made a misspelled "Blocked by" an unknown blocker: the spec doc's check 7, and this doc's "Reading the blockers" and check 13. Fixed in each.
+3. **Codex (blocking): the docs still said a failed read of the built lists is always exit 2,** after Qodo's fix made it 4 after a won claim: the spec doc's "Blockers", and this doc's "Security" and check 11. Fixed in each.
+4. **Codex (minor): most `list` cases checked its output but not its exit code.** Fixed: every successful `list` in `ticket.test.sh` also checks exit 0.
+5. **opencode (minor): `refine-ticket` step 9.1 didn't stop on a misspelled "Blocked by",** which `ticket.sh` now counts as an unknown blocker, so the owner could mark ready a ticket that waits on a typo. Fixed: it's a stop, like an empty entry, in the skill and in 0003's spec.
 
 **0007's check 9, the runner's first real run by hand** (2026-11-25, started by the owner in a terminal; see [0007](0007-agent-runner.md), "Delivery and review", check 9):
 - `scripts/agent-run.sh check` passed first: the tools, `bwrap` hiding a folder with no network, the key (mode 600), the client ID, and a token.

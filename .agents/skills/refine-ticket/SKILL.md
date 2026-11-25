@@ -150,7 +150,7 @@ The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`)
    fi
    ```
 
-   A `not built` line isn't a stop: the ticket is marked `ready` and waits for that item, and the PR's description names it (step 7). An `unknown` line is a stop: the title is a typo, or names an item that was dropped, so tell the user, who fixes the row first. A `Blocked by` with an empty entry (`Blocked by: .`, or `A; ; B`) is a stop too, for the same reason: `scripts/ticket.sh` would treat it as an unknown blocker. The number must be unused on `main`, in `docs/features/` and `docs/tickets/`, and in every ticket and reservation branch on `origin`:
+   A `not built` line isn't a stop: the ticket is marked `ready` and waits for that item, and the PR's description names it (step 7). An `unknown` line is a stop: the title is a typo, or names an item that was dropped, so tell the user, who fixes the row first. A `Blocked by` with an empty entry (`Blocked by: .`, or `A; ; B`) is a stop too, for the same reason: `scripts/ticket.sh` would treat it as an unknown blocker. So is a Notes cell that starts "Blocked by" spelled any other way (`Blocked By: A`, `Blocked by:A`, `blocked by A`), which `scripts/ticket.sh` also counts as an unknown blocker: the user fixes the spelling first. The number must be unused on `main`, in `docs/features/` and `docs/tickets/`, and in every ticket and reservation branch on `origin`:
 
    ```sh
    git fetch -q origin &&

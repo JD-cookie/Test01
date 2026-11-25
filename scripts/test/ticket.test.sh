@@ -151,7 +151,17 @@ run claim 0012-thing tester
 expect "claim exits 2 (was $rc)" [ "$rc" -eq 2 ]
 expect "claim says why" err_has "ticket: 0012-thing is waiting on: Build the base. It can be claimed once each one is built; one that's not in the backlog or built needs the row fixed on main."
 expect "claim makes no branch, local or on origin" no_branch 0012-thing
-result 1 "waiting: listed with its blocker, skipped, and refused"
+# A blocker's title with backslashes is printed as it is: no echo turns them into anything else.
+new_case
+row 0012-thing "Do a thing" ready 'Blocked by: Use \n and \c here.' >>"$T/rows"
+other 'Use \n and \c here' >>"$T/rows"
+setup
+run list
+expect "list exits 0 with a backslash title (was $rc)" [ "$rc" -eq 0 ]
+expect "list prints the title as it is" out_is '0012-thing  waiting on: Use \n and \c here'
+run claim 0012-thing tester
+expect "claim prints the title as it is" err_has 'is waiting on: Use \n and \c here. It can be claimed'
+result 1 "waiting: listed with its blocker, skipped, and refused; titles printed as they are"
 
 # ---- 2. Built ------------------------------------------------------------------------------
 
@@ -163,6 +173,7 @@ for where in tickets features; do
   if [ "$where" = tickets ]; then built "Build the base" >>"$T/tickets"; else feature "Build the base" >>"$T/features"; fi
   setup
   run list
+  expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
   expect "$where: list prints ready" out_is "0012-thing  ready"
   run claim next tester
   expect "$where: claim next exits 0 (was $rc)" [ "$rc" -eq 0 ]
@@ -179,6 +190,7 @@ built "Build the base" >"$T/tickets"
 feature "Accounts" >"$T/features"
 setup
 run list
+expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
 expect "list names only the one not built" out_is "0012-thing  waiting on: Build the roof"
 result 3 "two blockers, one built: only the other is named"
 
@@ -190,6 +202,7 @@ built "Build the base" >"$T/tickets"
 feature "Accounts" >"$T/features"
 setup
 run list
+expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
 expect "list marks it unknown" out_is "0012-thing  waiting on: Ghost (not in the backlog or built)"
 run claim next tester
 expect "claim next exits 3 (was $rc)" [ "$rc" -eq 3 ]
@@ -222,6 +235,7 @@ feature "Accounts" >"$T/features"
 setup
 on_main "grep -v '^|  | Build the base |' docs/backlog/README.md >x && mv x docs/backlog/README.md"
 run list
+expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
 expect "list marks it unknown" out_is "0012-thing  waiting on: Build the base (not in the backlog or built)"
 run claim next tester
 expect "claim next exits 3 (was $rc)" [ "$rc" -eq 3 ]
@@ -236,6 +250,7 @@ other "Alpha" >>"$T/rows"
 other "Beta" >>"$T/rows"
 setup
 run list
+expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
 expect "list reads Alpha and Beta only, and no blockers for the other" out_is "0012-thing  waiting on: Alpha; Beta
 0013-other  ready"
 result 7 "notes after the list are not blockers, nor a later 'Blocked by'"
@@ -247,6 +262,7 @@ row 0012-thing "Do a thing" ready "Blocked by: Build the \`base\`" >>"$T/rows"
 linked base "Build the \`base\`" >>"$T/rows"
 setup
 run list
+expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
 expect "list finds the linked row" out_is "0012-thing  waiting on: Build the \`base\`"
 result 8 "a blocker whose row links its doc is found as not built"
 
@@ -256,6 +272,7 @@ new_case
 row 0012-thing "Do a thing" ready "Nothing blocks it." >>"$T/rows"
 setup
 run list
+expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
 expect "list prints ready (exit $rc)" out_is "0012-thing  ready"
 run claim next tester
 expect "claim next exits 0 (was $rc)" [ "$rc" -eq 0 ]
@@ -316,6 +333,7 @@ setup
 claim_elsewhere 0012-thing
 on_main "git rm -q docs/backlog/0013-other.md"
 run list
+expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
 expect "list prints the states of today (exit $rc)" out_is "0012-thing  claimed (branch exists on origin)
 0013-other  not claimable: docs/backlog/0013-other.md is missing on main
 0015-odd  not claimable: the row's # column doesn't match the doc's number. Fix the row on main
@@ -336,6 +354,7 @@ built "Beta" >>"$T/tickets"
 feature "Accounts" >"$T/features"
 setup
 run list
+expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
 expect "list shows each as waiting on an empty entry (exit $rc)" out_is '0012-thing  waiting on: (an empty entry in "Blocked by")
 0013-other  waiting on: (an empty entry in "Blocked by")
 0014-third  waiting on: (an empty entry in "Blocked by")
@@ -355,6 +374,7 @@ other "Build the base" >>"$T/rows"
 setup
 claim_elsewhere 0012-thing
 run list
+expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
 expect "list prints the waiting line" out_is "0012-thing  waiting on: Build the base"
 run claim 0012-thing tester
 expect "claim exits 2, not 3 (was $rc)" [ "$rc" -eq 2 ]
@@ -375,6 +395,7 @@ setup
 claim_elsewhere 0013-other
 on_main "git rm -q docs/backlog/0014-third.md"
 run list
+expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
 expect "list prints each state (exit $rc)" out_is "0012-thing  ready
 0013-other  claimed (branch exists on origin)
 0014-third  not claimable: docs/backlog/0014-third.md is missing on main

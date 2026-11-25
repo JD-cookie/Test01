@@ -51,7 +51,7 @@ For each title:
 - **Built:** no such row, and `docs/tickets/README.md` or `docs/README.md` on `origin/main` has `| [<title>](`.
 - **Unknown:** neither, for example a typo, or a blocker that was dropped. It counts as not built, so a ticket is never claimed past a blocker nobody can find.
 
-`docs/tickets/README.md` and `docs/README.md` are read only when a blocker of a `ready` row has no row in the backlog, the only case in which they decide anything. If either can't be read then, the command exits 2, so a failed read can never make a blocker look built.
+`docs/tickets/README.md` and `docs/README.md` are read only when a blocker of a `ready` row has no row in the backlog, the only case in which they decide anything. If either can't be read then, the command exits 2, or 4 in the check after a won claim (see `claim`), so a failed read can never make a blocker look built.
 
 Once every blocker is built, the same `ready` row is free to claim, with no edit to it.
 
@@ -188,13 +188,13 @@ Only the owner releases a claim, by deleting the ticket's branch on `origin`. Th
 
 All are in `scripts/test/ticket.test.sh` unless they say otherwise. Each runs the script in a scratch clone of a scratch bare `origin`, whose `main` has a backlog, and a `docs/tickets/README.md` and `docs/README.md` when the check says so. What shows it passed: `npm run test:scripts` prints `ok N`.
 
-1. **Waiting:** a `ready` row `0012-thing` blocked by an item whose row is in the backlog: `list` prints `0012-thing  waiting on: <title>`; `claim next` exits 3 and creates no branch on `origin`; `claim 0012-thing` exits 2 with its message and creates no branch, local or on `origin`.
+1. **Waiting:** a `ready` row `0012-thing` blocked by an item whose row is in the backlog: `list` prints `0012-thing  waiting on: <title>`; `claim next` exits 3 and creates no branch on `origin`; `claim 0012-thing` exits 2 with its message and creates no branch, local or on `origin`. A blocker titled `Use \n and \c here` is printed as it is, by `list` and in `claim`'s message.
 2. **Built:** the same row, with the blocker's row gone and the blocker in `docs/tickets/README.md`: `list` prints `0012-thing  ready`, and `claim next` claims it. With the blocker in `docs/README.md`'s Features table instead, the same.
 3. **Two blockers, one built:** `list` names only the one not built.
 4. **Unknown:** a blocker in neither the backlog nor the built lists: `list` prints `waiting on: <title> (not in the backlog or built)`, and `claim next` skips it.
 5. **Order:** a waiting ticket above a free one: `claim next` claims the free one.
 6. **Row gone but not in the index:** a blocker whose row was removed on `main`, and that isn't in either built list, is unknown, so the ticket waits.
-7. **Notes after the list:** `Blocked by: A; B. Part 2 of 3.` reads `A` and `B` only; a cell that doesn't start with `Blocked by: ` has no blockers, even if it mentions "Blocked by" later.
+7. **Notes after the list:** `Blocked by: A; B. Part 2 of 3.` reads `A` and `B` only; a cell that starts with something else has no blockers, even if it mentions "Blocked by" later (a cell that starts "Blocked by" spelled another way is check 13).
 8. **Linked blocker row:** a blocker whose row's Item is `[<title>](<slug>.md)` is found as not built.
 9. **No index:** `main` with no `docs/tickets/README.md` and no blocked rows: `list` and `claim next` work as before.
 10. **Failed read:** a `ready` row blocked by a title with no row, and no `docs/tickets/README.md` on `main`: `list` exits 2 with `couldn't read docs/tickets/README.md`, and prints no `ready` line.
