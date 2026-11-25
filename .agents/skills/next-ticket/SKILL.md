@@ -14,7 +14,7 @@ scripts/ticket.sh claim next <agent-name>        # the first free ready ticket
 scripts/ticket.sh claim NNNN-slug <agent-name>    # only if the user named a ticket
 ```
 
-Picking and claiming are one step, so the time between seeing a ticket as free and claiming it stays short. `claim next` goes through `main`'s `ready` tickets in priority order, skips those already claimed (their branch exists on `origin`), and tries to claim the first free one. If another agent wins the race for it, it tries the next one. If a ticket stopped being `ready` after it was listed, it reads the list again once and starts over. It stops at the first ticket it wins. To see the tickets and which are claimed without claiming anything, run `scripts/ticket.sh list`.
+Picking and claiming are one step, so the time between seeing a ticket as free and claiming it stays short. `claim next` goes through `main`'s `ready` tickets in priority order, skips those already claimed (their branch exists on `origin`) and those waiting on a blocker that isn't built yet (their row's Notes start "Blocked by: …"; `list` shows them as `waiting on: …`), and tries to claim the first free one. If another agent wins the race for it, it tries the next one. If a ticket stopped being `ready` after it was listed, it reads the list again once and starts over. It stops at the first ticket it wins. To see the tickets and which are claimed without claiming anything, run `scripts/ticket.sh list`.
 
 Don't build an `idea` or `designed` item, and don't mark anything `ready` yourself: only the user decides that, through the `refine-ticket` skill or by hand. If the user asks you to get an item ready, use `refine-ticket`.
 
@@ -27,9 +27,9 @@ Use a name that tells agents apart, e.g. `claude-<short session id>`. The script
 What the exit codes mean:
 - **0:** the ticket is yours, and you're on its branch.
 - **3:** with `next`, no free ticket is left: stop and tell the user. With a named ticket, another agent got there first: tell the user, or run `claim next`. Never delete or overwrite another agent's branch, and never push to it with `--force`.
-- **2:** the ticket isn't `ready`, your checkout has changes (untracked files count), a local branch is in the way, or the claim commit failed. Your checkout is left as it was. Fix the cause or ask the user.
-- **4:** `origin` couldn't be reached, so the outcome isn't known. If the script kept your local branch, run `scripts/ticket.sh verify NNNN-slug` once `origin` is reachable. It returns 0 if the claim is yours, 3 if it isn't (the message says whether to claim again), and 4 if `origin` still can't be reached. If there is no local branch, try the claim again.
-- **5:** the claim is yours, but the user withdrew or changed the ticket on `main` while you claimed it. Don't build it. Tell the user, and leave the branch: it still holds the claim, and only the user releases it.
+- **2:** the ticket isn't `ready` or is waiting on a blocker, your checkout has changes (untracked files count), a local branch is in the way, or the claim commit failed. Your checkout is left as it was. Fix the cause or ask the user.
+- **4:** the outcome isn't settled. Either `origin` couldn't be reached, or the claim is yours but `main`'s backlog or the ticket's blockers couldn't be read to check it's still ready (the message says which, and a missing file on `main` is for the user to fix). If the script kept your local branch, run `scripts/ticket.sh verify NNNN-slug` once the cause is gone. It returns 0 if the claim is yours, 3 if it isn't (the message says whether to claim again), 5 as below, and 4 if the cause is still there. If there is no local branch, as when the push failed and `origin` has no branch (`nobody holds the claim`), try the claim again.
+- **5:** the claim is yours, but the user withdrew or changed the ticket on `main` while you claimed it, or gave it a blocker that isn't built. Don't build it. Tell the user, and leave the branch: it still holds the claim, and only the user releases it.
 
 ## 2. Build it
 

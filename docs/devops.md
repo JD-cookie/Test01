@@ -167,7 +167,7 @@ Until `RELEASE_APP_CLIENT_ID` is set, the release workflow's job is skipped rath
 |---|---|
 | `server` | `npm ci` and `npm run check` (typecheck and tests) in `server/`, with a Valkey 9 service container and `VALKEY_URL` set, so the Valkey store tests run too |
 | `app` | `npm ci` and `npm run check` (typegen, lint, typecheck) in `app/` |
-| `scripts` | `npm ci` and `npm run test:scripts` at the root: the runner's tests (see "The runner"). The cases that need a working `bwrap` are skipped where there isn't one |
+| `scripts` | `npm ci` and `npm run test:scripts` at the root: the tests of `scripts/ticket.sh` (see [features/0008-ticket-system.md](features/0008-ticket-system.md)) and of the runner (see "The runner"). The cases that need a working `bwrap` are skipped where there isn't one |
 
 And `.github/workflows/pr-title.yml` runs on PRs, including when the title is edited:
 
@@ -197,7 +197,7 @@ podman run --rm -v "$PWD:/repo:Z" -w /repo docker.io/rhysd/actionlint:latest -no
 npm run check                  # repo root: everything below
 npm --prefix server run check  # typecheck + API tests, each on a fresh in-memory database
 npm --prefix app run check     # typegen + lint + typecheck
-npm run test:scripts           # the runner's tests (scripts/test/), about two minutes
+npm run test:scripts           # the ticket script's and the runner's tests (scripts/test/), about three minutes
 ```
 
 The pre-commit hook runs these automatically for the parts you changed (`server/`, `app/`, `scripts/`; see the README), and CI runs them on every PR.
@@ -278,3 +278,4 @@ Deploy the server before the app because a new app may rely on new endpoints, wh
 - Changes before ticket 0006 aren't listed here: git has them.
 - 0006: Keep the spec separate from the ticket history ([ticket](tickets/0006-spec-and-tickets.md))
 - 0007: A runner that builds a ready ticket into a PR ([ticket](tickets/0007-agent-runner.md))
+- 0008: Mark a blocked ticket `ready` before its blockers are built ([ticket](tickets/0008-ready-before-blockers.md))

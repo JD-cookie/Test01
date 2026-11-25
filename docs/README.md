@@ -43,6 +43,7 @@ The spec and the history of how it was built are kept apart:
 | 0002 | [Rate limiting of login and signup](features/0002-rate-limiting.md) | Implemented |
 | 0003 | [A skill that gets a ticket ready to build](features/0003-refine-ticket-skill.md) | Implemented |
 | 0007 | [A runner that builds a ready ticket into a PR](features/0007-agent-runner.md) | Implemented (part 1 of 3) |
+| 0008 | [The ticket system: statuses, claims, and blockers](features/0008-ticket-system.md) | Implemented |
 
 Work that isn't built yet, with any design docs written for it, is tracked in [backlog/README.md](backlog/README.md), which works as the ticket system. An item gets its number when it's marked `ready`, so its branch name `NNNN-<slug>` is known in advance. In the PR that builds it, its design doc moves from `backlog/` into `tickets/`, and the PR writes or edits the spec docs. A new capability gets a spec doc in `features/` with the ticket's number, so this folder's numbers have gaps.
 
@@ -88,3 +89,4 @@ A ticket's design doc is written in `backlog/` and moves to `tickets/` in the PR
 - 0003: A skill that gets a ticket ready to build ([ticket](tickets/0003-refine-ticket-skill.md))
 - 0006: Keep the spec separate from the ticket history ([ticket](tickets/0006-spec-and-tickets.md))
 - 0007: A runner that builds a ready ticket into a PR ([ticket](tickets/0007-agent-runner.md))
+- 0008: Mark a blocked ticket `ready` before its blockers are built ([ticket](tickets/0008-ready-before-blockers.md))
