@@ -234,6 +234,9 @@ Built on branch `0008-ready-before-blockers`, claimed by the runner (`runner-49e
 4. **Codex (minor): most `list` cases checked its output but not its exit code.** Fixed: every successful `list` in `ticket.test.sh` also checks exit 0.
 5. **opencode (minor): `refine-ticket` step 9.1 didn't stop on a misspelled "Blocked by",** which `ticket.sh` now counts as an unknown blocker, so the owner could mark ready a ticket that waits on a typo. Fixed: it's a stop, like an empty entry, in the skill and in 0003's spec.
 
+**Qodo, on da44031:** found the 3 earlier findings resolved, and 1 new one (a skill insight), checked and fixed:
+1. **`refine-ticket` step 9.1 read both built lists before checking the blocker's row,** so a missing `docs/tickets/README.md` or `docs/README.md` would stop the refinement even for a blocker that still has a row, which isn't a stop and which `ticket.sh` decides without them. Fixed: the snippet checks the row first, and reads the built lists only for a title with no row; a failed read then prints `error: …`, a stop. Run against `main` for a blocker with a row (`not built`), a built one (nothing), and an unknown title (`unknown`).
+
 **0007's check 9, the runner's first real run by hand** (2026-11-25, started by the owner in a terminal; see [0007](0007-agent-runner.md), "Delivery and review", check 9):
 - `scripts/agent-run.sh check` passed first: the tools, `bwrap` hiding a folder with no network, the key (mode 600), the client ID, and a token.
 - The run started at 05:04:58Z. It cloned the repo into its own folder, installed the dependencies, and claimed this ticket with `claim next` at 05:05:32Z, as `runner-49e67a9555ee`: 0008, the first free ticket, above 0004.
