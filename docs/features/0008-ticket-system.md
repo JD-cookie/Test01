@@ -17,11 +17,11 @@ How ticket numbers are given and reserved when a ticket is marked `ready` is in 
 
 ## Concepts
 
-- **Row:** one line of the backlog's table: `| # | Item | Area | Status | Notes |`. Read with `|` as the separator, the `#` cell is field 2, Item field 3, Status field 5, and Notes field 6 (field 1 is the empty text before the first `|`). Cells are trimmed of spaces.
+- **Row:** one line of the backlog's table: `| # | Item | Area | Status | Notes |`. Read with `|` as the separator, the `#` cell is field 2, Item field 3, Status field 5, and Notes field 6 (field 1 is the empty text before the first `|`). Cells are trimmed of spaces and tabs.
 - **Ticket:** a row with a four-digit number in `#` and an Item that links its design doc, `[<title>](NNNN-<slug>.md)`. `NNNN-<slug>` is its name and its branch's name.
 - **Claim:** the ticket's branch on `origin`, made by `scripts/ticket.sh claim`, whose first commit after `main` is the claim commit.
 - **Blocker:** an item named in a row's "Blocked by: …" notes.
-- **Built:** a blocker whose row is gone from `main`'s backlog and whose title is listed in `main`'s `docs/tickets/README.md`, or, for features built before the backlog (0001 and 0002), in the Features table of `main`'s `docs/README.md`, as `| [<title>](`.
+- **Built:** a blocker whose row is gone from `main`'s backlog and whose title is listed in `main`'s `docs/tickets/README.md`, or, for features built before the backlog (0001 and 0002), in the Features table of `main`'s `docs/README.md`: in either, the title cell (field 3) of its row starts with `[<title>](`.
 - **Waiting:** a `ready` ticket with at least one blocker not built.
 
 ## User-facing behavior
@@ -40,7 +40,7 @@ There's no status for waiting: a waiting ticket's row says `ready` and keeps its
 ### Blockers
 
 An item that can't start until others are built begins its Notes cell with `Blocked by: `, then the items' titles. The blockers are read from the row's Notes cell on `origin/main`:
-- Only a cell that starts `Blocked by: ` (after spaces), or is exactly `Blocked by:`, has blockers. A cell that mentions "Blocked by" later has none.
+- Only a cell that starts `Blocked by: ` (after spaces or tabs), or is exactly `Blocked by:`, has blockers. A cell that mentions "Blocked by" later has none.
 - A cell that starts "Blocked by" written any other way, in any case, with or without the colon or the space after it (`Blocked By: A`, `Blocked by:A`, `blocked by A`), counts as one unknown blocker, shown as `(a "Blocked by" not written as "Blocked by: <title>; <title>")`: the owner meant it to wait, and its list isn't read.
 - The list runs to the first `. ` (a period and a space) or to the end of the cell, whichever comes first, and a trailing `.` is dropped. The rest of the cell is free text.
 - Titles are separated by `; `, with spaces trimmed. A title is plain text, as the Item column writes it.
@@ -48,7 +48,7 @@ An item that can't start until others are built begins its Notes cell with `Bloc
 
 For each title:
 - **Not built, in the backlog:** some row's Item cell is the title, or starts with a link whose text is the title (`[<title>](`).
-- **Built:** no such row, and `docs/tickets/README.md` or `docs/README.md` on `origin/main` has `| [<title>](`.
+- **Built:** no such row, and in `docs/tickets/README.md` or `docs/README.md` on `origin/main`, the title cell (field 3) of a row there starts with `[<title>](`. A link in another column, like the tickets index's "Spec docs changed", doesn't count.
 - **Unknown:** neither, for example a typo, or a blocker that was dropped. It counts as not built, so a ticket is never claimed past a blocker nobody can find.
 
 `docs/tickets/README.md` and `docs/README.md` are read only when a blocker of a `ready` row has no row in the backlog, the only case in which they decide anything. If either can't be read then, the command exits 2, or 4 in the check after a won claim (see `claim`), so a failed read can never make a blocker look built.
@@ -112,6 +112,7 @@ Then it makes the claim (see "Processing"). Its outcomes:
 | 4 | `the claim is yours, but the blockers of <slug> on main couldn't be read (see above). Run: scripts/ticket.sh verify <slug>`, after the failed read's own message |
 | 5 | `the claim is yours, but on main <slug> is now '<status or gone>', not 'ready'. Don't build it: ask the user. Leave the branch; only the user releases a claim.` |
 | 5 | `the claim is yours, but on main <slug> is now waiting on: <title>. Don't build it: ask the user. Leave the branch; only the user releases a claim.` |
+| 4 | `the claim is yours, but docs/backlog/<slug>.md on main couldn't be compared with the claim (see above). Run: scripts/ticket.sh verify <slug>`, when `git diff` fails rather than finding a change |
 | 5 | `the claim is yours, but docs/backlog/<slug>.md changed on main since the claim. Don't build it: ask the user. Leave the branch; only the user releases a claim.` |
 
 If setting the branch's upstream fails after a won claim, it warns `the claim is yours, but setting the branch's upstream failed. Later, run: git push -u origin <slug>`, and the outcome stays 0.
@@ -153,7 +154,7 @@ For a claim whose outcome wasn't known (exit 4), with the local branch it left:
 2. **Make the claim commit:** a new local branch `NNNN-<slug>` from `origin/main`, with one commit that sets the ticket row's Status cell to `in progress (claim <id>, <agent>, <time>)`: `<id>` is 8 random hex digits (4 bytes of `/dev/urandom`), `<time>` is UTC as `YYYY-MM-DDTHH:MMZ`. Its message is `chore(repo): claim ticket <slug>`, with the trailers `Claim-Id: <id>` and `Claimed-By: <agent>`. The random id makes every claim commit unique: two agents making the same commit would get the same hash, and both pushes would seem to succeed.
 3. **Push it create-only:** `git push --force-with-lease=refs/heads/<slug>: -u origin <slug>`. The empty lease means "only if the branch doesn't exist", and git updates the branch atomically, so only one push can create it.
 4. **Decide from what `origin` holds:** the claim is won only if `origin`'s branch points at this commit. A failed push isn't proof of a lost race (the reply may have been lost), and a successful one isn't checked any other way. If `origin` has another commit, the race is lost, and the local branch is deleted. If it has none, nobody holds the claim. If it can't be reached, the local branch is kept for `verify`.
-5. **Check `main` again** (`still_ready`): fetch `main`, and check that the ticket is still `ready`, that it isn't waiting (the owner may have added a blocker), and that its design doc is the same as in the claim commit's parent. Otherwise exit 5, and the branch stays.
+5. **Check `main` again** (`still_ready`): fetch `main`, and check that the ticket is still `ready`, that it isn't waiting (the owner may have added a blocker), and that its design doc is the same as in the claim commit's parent. If one of them changed, exit 5. If one couldn't be checked (the fetch, a read, or the comparison failed), exit 4, so `verify` can check again. Either way, the branch stays.
 
 Before the push, any failure puts the checkout back as it was: the clean tree is reset, the starting branch (or detached commit) is checked out again, and the new branch is deleted.
 
@@ -190,7 +191,7 @@ Only the owner releases a claim, by deleting the ticket's branch on `origin`. Th
 All are in `scripts/test/ticket.test.sh` unless they say otherwise. Each runs the script in a scratch clone of a scratch bare `origin`, whose `main` has a backlog, and a `docs/tickets/README.md` and `docs/README.md` when the check says so. What shows it passed: `npm run test:scripts` prints `ok N`.
 
 1. **Waiting:** a `ready` row `0012-thing` blocked by an item whose row is in the backlog: `list` prints `0012-thing  waiting on: <title>`; `claim next` exits 3 and creates no branch on `origin`; `claim 0012-thing` exits 2 with its message and creates no branch, local or on `origin`. A blocker titled `Use \n and \c here` is printed as it is, by `list` and in `claim`'s message.
-2. **Built:** the same row, with the blocker's row gone and the blocker in `docs/tickets/README.md`: `list` prints `0012-thing  ready`, and `claim next` claims it. With the blocker in `docs/README.md`'s Features table instead, the same.
+2. **Built:** the same row, with the blocker's row gone and the blocker in `docs/tickets/README.md`: `list` prints `0012-thing  ready`, and `claim next` claims it. With the blocker in `docs/README.md`'s Features table instead, the same. A blocker named only in another column, like `Blocked by: 0003-base.md.` with `[0003-base.md](…)` under "Spec docs changed", isn't built: `waiting on: 0003-base.md (not in the backlog or built)`.
 3. **Two blockers, one built:** `list` names only the one not built.
 4. **Unknown:** a blocker in neither the backlog nor the built lists: `list` prints `waiting on: <title> (not in the backlog or built)`, and `claim next` skips it.
 5. **Order:** a waiting ticket above a free one: `claim next` claims the free one.
@@ -201,7 +202,7 @@ All are in `scripts/test/ticket.test.sh` unless they say otherwise. Each runs th
 10. **Failed read:** a `ready` row blocked by a title with no row, and no `docs/tickets/README.md` on `main`: `list` exits 2 with `couldn't read docs/tickets/README.md`, and prints no ticket lines, not even for a free ticket above it.
 11. **Blocker added after the claim:** after a won claim, `main` gets a commit that adds an unbuilt blocker to the row: `verify 0012-thing` exits 5 with its message. If the new blocker has no row and `main` has no `docs/tickets/README.md`, so the blockers can't be read, it exits 4 with its message, and the branch stays; so does a `main` with no `docs/backlog/README.md`.
 12. **Unchanged cases:** with their blockers built, a claimed ticket, a missing design doc, and a mismatched number print the same lines as with no blockers.
-13. **Empty entries and a misspelled "Blocked by":** `Blocked by: .`, `Blocked by:`, and `Blocked by: A; ; B` (A and B built): `list` prints `waiting on: (an empty entry in "Blocked by")`. `Blocked By: A.`, `Blocked by:A`, and `blocked by A and B.`: `list` prints `waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")`. `claim next` skips them all.
+13. **Empty entries and a misspelled "Blocked by":** `Blocked by: .`, `Blocked by:`, and `Blocked by: A; ; B` (A and B built): `list` prints `waiting on: (an empty entry in "Blocked by")`. `Blocked By: A.`, `Blocked by:A`, and `blocked by A and B.`: `list` prints `waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")`. A tab before `Blocked by: Ghost.` is trimmed: `waiting on: Ghost (not in the backlog or built)`. `claim next` skips them all.
 14. **Waiting and claimed:** a waiting ticket whose branch is on `origin`: `list` prints its waiting line, and `claim` of it exits 2, not 3.
 15. **The runner** (`scripts/test/agent-run.test.sh`, its check 1): with its seed's ticket waiting on a blocker whose row is in the seed's backlog, and no `docs/tickets/README.md`, the run logs `no ready ticket`, exits 0, and calls neither `claude` nor `claim next`.
 16. **`refine-ticket`, by reading:** its steps 8 and 9.1 tell the owner a blocked ticket will wait, and stop only for an unknown blocker.
@@ -209,7 +210,7 @@ All are in `scripts/test/ticket.test.sh` unless they say otherwise. Each runs th
 18. **A won claim:** `claim 0012-thing tester` exits 0 and prints `claimed 0012-thing (claim <id>) on branch 0012-thing`. `origin`'s `0012-thing` is the local branch's commit, its parent is `main`, its only change is the row's status, `in progress (claim <id>, tester, <time>)`, and its message has `Claim-Id: <id>` and `Claimed-By: tester`.
 19. **Already claimed:** with `0012-thing` already on `origin`, `claim 0012-thing` exits 3 and leaves no local branch; `claim next` with one other free ticket claims that one.
 20. **Refused before anything is made (exit 2):** a checkout with an untracked file; an agent name with a space; a name that isn't `NNNN-slug`; a `NNNN-slug` with no numbered row on `main`. None leaves a new branch, local or on `origin`.
-21. **Withdrawn after the claim (exit 5):** after a won claim, `main` sets the row back to `designed`, or changes the design doc: `verify 0012-thing` exits 5 with its message, and the branch on `origin` stays.
+21. **Withdrawn after the claim (exit 5):** after a won claim, `main` sets the row back to `designed`, or changes the design doc: `verify 0012-thing` exits 5 with its message, and the branch on `origin` stays. If `git diff` fails instead of finding a change, `verify` exits 4 with its message.
 22. **`verify`:** with the local branch equal to `origin`'s, exit 0 and `claimed: origin's 0012-thing is your claim commit`; with no branch on `origin`, exit 3; with another agent's commit there, exit 3.
 
 Two agents racing for one ticket stay a check by reading the code: the create-only push is git's, and checks 18 and 19 cover both outcomes one at a time.

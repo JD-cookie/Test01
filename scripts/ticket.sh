@@ -93,7 +93,7 @@ waiting_on() {
   # doesn't, "empty" once if the list has an empty entry, and only "malformed" for a cell that
   # starts "Blocked by" written another way.
   w_found=$(printf '%s\n' "$w_text" | awk -F'|' -v link="](${1}.md)" '
-    function trim(x) { gsub(/^ +| +$/, "", x); return x }
+    function trim(x) { gsub(/^[ \t]+|[ \t]+$/, "", x); return x }
     /^\|/ { items[n++] = trim($3) }
     $2 ~ /^ *[0-9][0-9][0-9][0-9] *$/ && index($3, link) && !found { notes = trim($6); found = 1 }
     END {
@@ -131,7 +131,12 @@ waiting_on() {
     case $w_kind in
       row) w_add=$w_title ;;
       norow)
-        if printf '%s\n' "$w_built" | grep -qF -- "| [$w_title]("; then continue; fi
+        # Built: a row of either list whose title cell (field 3) links this title. A link in
+        # another column, like the tickets index's "Spec docs changed", doesn't count.
+        if printf '%s\n' "$w_built" | t=$w_title awk -F'|' 'BEGIN { t = ENVIRON["t"] }
+          { x = $3; gsub(/^[ \t]+/, "", x) } index(x, "[" t "](") == 1 { f = 1 } END { exit !f }'; then
+          continue
+        fi
         w_add="$w_title (not in the backlog or built)" ;;
       empty) w_add='(an empty entry in "Blocked by")' ;;
       malformed) w_add='(a "Blocked by" not written as "Blocked by: <title>; <title>")' ;;
@@ -160,7 +165,12 @@ still_ready() {
     die 4 "the claim is yours, but the blockers of $1 on main couldn't be read (see above). Run: scripts/ticket.sh verify $1"
   [ -z "$waits" ] ||
     die 5 "the claim is yours, but on main $1 is now waiting on: $waits. Don't build it: ask the user. Leave the branch; only the user releases a claim."
-  git diff --quiet "$2^" origin/main -- "docs/backlog/$1.md" ||
+  # git diff exits 1 for a difference, and anything else for an error, which isn't a change.
+  w_diff=0
+  git diff --quiet "$2^" origin/main -- "docs/backlog/$1.md" || w_diff=$?
+  [ "$w_diff" -le 1 ] ||
+    die 4 "the claim is yours, but docs/backlog/$1.md on main couldn't be compared with the claim (see above). Run: scripts/ticket.sh verify $1"
+  [ "$w_diff" -eq 0 ] ||
     die 5 "the claim is yours, but docs/backlog/$1.md changed on main since the claim. Don't build it: ask the user. Leave the branch; only the user releases a claim."
 }
 

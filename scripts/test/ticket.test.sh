@@ -62,7 +62,7 @@ other() { printf '|  | %s | Dev tooling | %s | Not ready. |\n' "$1" "${2:-design
 linked() { printf '|  | [%s](%s.md) | Dev tooling | %s | Not ready. |\n' "$2" "$1" "${3:-designed}"; }
 # A built ticket's row in docs/tickets/README.md, and a feature's in docs/README.md.
 built() { printf '| 0099 | [%s](0099-x.md) | #1 | spec |\n' "$1"; }
-feature() { printf '| [%s](features/0001-x.md) | What it does |\n' "$1"; }
+feature() { printf '| 0001 | [%s](features/0001-x.md) | Implemented |\n' "$1"; }
 
 # setup: makes $T with origin.git, from the files the case wrote first in $T/seed:
 #   $T/rows      the backlog's rows (a design doc is made for every numbered row)
@@ -85,7 +85,7 @@ setup() {
     { printf '# Tickets\n\n| # | Ticket | PR | Spec docs changed |\n|---|---|---|---|\n'; cat "$T/tickets"; } >"$seed/docs/tickets/README.md"
   fi
   if [ -f "$T/features" ]; then
-    { printf '# Docs\n\n## Features\n\n| Feature | What |\n|---|---|\n'; cat "$T/features"; } >"$seed/docs/README.md"
+    { printf '# Docs\n\n## Features\n\n| # | Feature | Status |\n|---|---|---|\n'; cat "$T/features"; } >"$seed/docs/README.md"
   fi
   echo seed >"$seed/file.txt"
   git -C "$seed" add -A
@@ -179,7 +179,17 @@ for where in tickets features; do
   expect "$where: claim next exits 0 (was $rc)" [ "$rc" -eq 0 ]
   expect "$where: its branch on origin is the claim commit" claimed_ok 0012-thing
 done
-result 2 "built: in docs/tickets/README.md or docs/README.md, the ticket is free"
+# Only a row's title column counts: a title that is linked only in the "Spec docs changed"
+# column isn't built.
+new_case
+row 0012-thing "Do a thing" ready "Blocked by: 0003-base.md." >>"$T/rows"
+printf '| 0003 | [Build the base](0003-base.md) | #1 | [0003-base.md](../features/0003-base.md) |\n' >"$T/tickets"
+feature "Accounts" >"$T/features"
+setup
+run list
+expect "list exits 0 (was $rc)" [ "$rc" -eq 0 ]
+expect "a link in another column: list shows it waiting" out_is "0012-thing  waiting on: 0003-base.md (not in the backlog or built)"
+result 2 "built: in docs/tickets/README.md or docs/README.md, the ticket is free; only the title column counts"
 
 # ---- 3. Two blockers, one built ------------------------------------------------------------
 
@@ -361,6 +371,7 @@ row 0014-third "Third" ready "Blocked by:" >>"$T/rows"
 row 0015-fourth "Fourth" ready "Blocked By: Alpha." >>"$T/rows"
 row 0016-fifth "Fifth" ready "Blocked by:Alpha" >>"$T/rows"
 row 0017-sixth "Sixth" ready "blocked by Alpha and Beta." >>"$T/rows"
+row 0018-seventh "Seventh" ready "$(printf '\tBlocked by: Ghost.')" >>"$T/rows"
 built "Alpha" >"$T/tickets"
 built "Beta" >>"$T/tickets"
 feature "Accounts" >"$T/features"
@@ -372,11 +383,12 @@ expect "list shows each as waiting on an empty entry (exit $rc)" out_is '0012-th
 0014-third  waiting on: (an empty entry in "Blocked by")
 0015-fourth  waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")
 0016-fifth  waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")
-0017-sixth  waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")'
+0017-sixth  waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")
+0018-seventh  waiting on: Ghost (not in the backlog or built)'
 run claim next tester
 expect "claim next exits 3 (was $rc)" [ "$rc" -eq 3 ]
 expect "no branch is made" [ "$(branches)" = "main " ]
-result 13 "empty entries, and a misspelled 'Blocked by': one unknown blocker, so the ticket waits"
+result 13 "empty entries, and a misspelled 'Blocked by': one unknown blocker, so the ticket waits; a tab before it is trimmed"
 
 # ---- 14. Waiting and claimed ---------------------------------------------------------------
 
@@ -488,7 +500,21 @@ for change in status doc; do
   expect "$change: verify says why" err_has "$msg"
   expect "$change: the branch stays on origin" origin_has 0012-thing
 done
-result 21 "withdrawn or changed after the claim: exit 5, the branch stays"
+# A git diff that fails, rather than finding a change, is exit 4 (verify), not 5. A git on PATH
+# that fails only the design doc's comparison stands in for the error.
+new_case
+row 0012-thing "Do a thing" ready >>"$T/rows"
+setup
+run claim 0012-thing tester
+expect "diff error: the claim exits 0 (was $rc)" [ "$rc" -eq 0 ]
+mkdir "$T/bin"
+printf '#!/bin/sh\ncase "$*" in "diff --quiet "*" origin/main -- docs/backlog/"*) echo "fatal: broken" >&2; exit 128 ;; esac\nexec %s "$@"\n' "$(command -v git)" >"$T/bin/git"
+chmod +x "$T/bin/git"
+PATH=$T/bin:$PATH run verify 0012-thing
+expect "diff error: verify exits 4 (was $rc)" [ "$rc" -eq 4 ]
+expect "diff error: verify says why" err_has "ticket: the claim is yours, but docs/backlog/0012-thing.md on main couldn't be compared with the claim (see above). Run: scripts/ticket.sh verify 0012-thing"
+expect "diff error: the branch stays on origin" origin_has 0012-thing
+result 21 "withdrawn or changed after the claim: exit 5, the branch stays; a failed comparison is exit 4"
 
 # ---- 22. verify ----------------------------------------------------------------------------
 

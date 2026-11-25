@@ -142,16 +142,18 @@ The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`)
    b='<a title from "Blocked by">' &&
    git fetch -q origin &&
    backlog=$(git show origin/main:docs/backlog/README.md) &&
-   if printf '%s\n' "$backlog" | t=$b awk -F'|' -v c=3 'BEGIN { t = ENVIRON["t"] } { x = $c; gsub(/^ +| +$/, "", x) } x == t || index(x, "[" t "](") == 1' | grep -q .; then
+   rows=$(printf '%s\n' "$backlog" | t=$b awk -F'|' -v c=3 'BEGIN { t = ENVIRON["t"] } { x = $c; gsub(/^[ \t]+|[ \t]+$/, "", x) } x == t || index(x, "[" t "](") == 1') &&
+   if [ -n "$rows" ]; then
      printf '%s\n' "not built: $b"
    elif ! built=$(git show origin/main:docs/tickets/README.md && git show origin/main:docs/README.md); then
      echo "error: couldn't read docs/tickets/README.md or docs/README.md on origin/main"
-   elif ! printf '%s\n' "$built" | grep -qF "| [$b]("; then
+   elif ! printf '%s\n' "$built" | t=$b awk -F'|' -v c=3 'BEGIN { t = ENVIRON["t"] } { x = $c; gsub(/^[ \t]+/, "", x) } index(x, "[" t "](") == 1 { f = 1 } END { exit !f }'; then
      printf '%s\n' "unknown: $b (not in the backlog or built)"
-   fi
+   fi ||
+   echo "error: a command above failed"
    ```
 
-   The built lists are read only for a title with no row, as `scripts/ticket.sh` reads them, and an `error` line is a stop. A `not built` line isn't a stop: the ticket is marked `ready` and waits for that item, and the PR's description names it (step 7). An `unknown` line is a stop: the title is a typo, or names an item that was dropped, so tell the user, who fixes the row first. A `Blocked by` with an empty entry (`Blocked by: .`, or `A; ; B`) is a stop too, for the same reason: `scripts/ticket.sh` would treat it as an unknown blocker. So is a Notes cell that starts "Blocked by" spelled any other way (`Blocked By: A`, `Blocked by:A`, `blocked by A`), which `scripts/ticket.sh` also counts as an unknown blocker: the user fixes the spelling first. The number must be unused on `main`, in `docs/features/` and `docs/tickets/`, and in every ticket and reservation branch on `origin`:
+   The built lists are read only for a title with no row, as `scripts/ticket.sh` reads them, and only a row's title column counts there (a link in "Spec docs changed" doesn't). An `error` line is a stop. A `not built` line isn't a stop: the ticket is marked `ready` and waits for that item, and the PR's description names it (step 7). An `unknown` line is a stop: the title is a typo, or names an item that was dropped, so tell the user, who fixes the row first. A `Blocked by` with an empty entry (`Blocked by: .`, or `A; ; B`) is a stop too, for the same reason: `scripts/ticket.sh` would treat it as an unknown blocker. So is a Notes cell that starts "Blocked by" spelled any other way (`Blocked By: A`, `Blocked by:A`, `blocked by A`), which `scripts/ticket.sh` also counts as an unknown blocker: the user fixes the spelling first. The number must be unused on `main`, in `docs/features/` and `docs/tickets/`, and in every ticket and reservation branch on `origin`:
 
    ```sh
    git fetch -q origin &&
