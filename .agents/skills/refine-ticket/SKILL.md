@@ -134,20 +134,20 @@ Until `scripts/ticket.sh ready` exists (see the backlog), follow these steps by 
 
 In the commands below, `$title` is the item's title exactly as it is in its row on `main` (for a linked title, the text inside `[…]`), and `$slug` is the doc's name without `.md`. If any command fails, stop and tell the user: a check that couldn't run hasn't passed.
 
-The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`), never a dollar sign and the column number. When Claude Code loads a skill with arguments, it replaces each `$` followed by a digit with a word of the arguments, even inside code.
+The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`), never a dollar sign and the column number. A title goes to `awk` through the environment (`t=$b awk …`, read as `ENVIRON["t"]`), not with `-v`, which would turn a `\n` in the title into a new line. When Claude Code loads a skill with arguments, it replaces each `$` followed by a digit with a word of the arguments, even inside code.
 
-1. **Check the item and find the next free number.** On a fresh `origin/main`, the item's row must still have no number and not be `ready`. If it has one, someone else marked it ready: stop and tell the user. If its Notes start with "Blocked by: …", check each item named there. It's built if its row is gone from the backlog and it's listed in `docs/tickets/README.md`, or, for features built before the backlog (0001 and 0002), in the Features table of `docs/README.md`. Run this for each title named there, set as `b`; it prints nothing for a built item:
+1. **Check the item and find the next free number.** On a fresh `origin/main`, the item's row must still have no number and not be `ready`. If it has one, someone else marked it ready: stop and tell the user. If its Notes start with "Blocked by" in any spelling, check the list. Written as "Blocked by: …", check each item named there. It's built if its row is gone from the backlog and it's listed in `docs/tickets/README.md`, or, for features built before the backlog (0001 and 0002), in the Features table of `docs/README.md`. Run this for each title named there, set as `b`; it prints nothing for a built item:
 
    ```sh
    b='<a title from "Blocked by">' &&
    git fetch -q origin &&
    backlog=$(git show origin/main:docs/backlog/README.md) &&
-   if printf '%s\n' "$backlog" | awk -F'|' -v c=3 -v t="$b" '{ x = $c; gsub(/^ +| +$/, "", x) } x == t || index(x, "[" t "](") == 1' | grep -q .; then
-     echo "not built: $b"
+   if printf '%s\n' "$backlog" | t=$b awk -F'|' -v c=3 'BEGIN { t = ENVIRON["t"] } { x = $c; gsub(/^ +| +$/, "", x) } x == t || index(x, "[" t "](") == 1' | grep -q .; then
+     printf '%s\n' "not built: $b"
    elif ! built=$(git show origin/main:docs/tickets/README.md && git show origin/main:docs/README.md); then
      echo "error: couldn't read docs/tickets/README.md or docs/README.md on origin/main"
    elif ! printf '%s\n' "$built" | grep -qF "| [$b]("; then
-     echo "unknown: $b (not in the backlog or built)"
+     printf '%s\n' "unknown: $b (not in the backlog or built)"
    fi
    ```
 
@@ -191,15 +191,15 @@ The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`)
 
    ```sh
    git fetch -q origin &&
-   item='{ x = $c; gsub(/^ +| +$/, "", x) } x == t || index(x, "[" t "](") == 1' &&
+   item='BEGIN { t = ENVIRON["t"] } { x = $c; gsub(/^ +| +$/, "", x) } x == t || index(x, "[" t "](") == 1' &&
    heads=$(git ls-remote --heads origin 'ready-*') &&
    for b in $(printf '%s\n' "$heads" | sed -n 's#.*refs/heads/##p'); do
      [ "$b" = "ready-$n" ] && continue
      git fetch -q origin "$b" && base=$(git merge-base origin/main FETCH_HEAD) || { echo "error: $b"; break; }
      git diff "$base" FETCH_HEAD -- docs/backlog/README.md | grep '^-|' |
-       awk -F'|' -v c=3 -v t="$title" "$item" | grep -q . && echo "same item: $b"
+       t=$title awk -F'|' -v c=3 "$item" | grep -q . && echo "same item: $b"
    done
-   row=$(git show origin/main:docs/backlog/README.md | awk -F'|' -v c=3 -v t="$title" "$item")
+   row=$(git show origin/main:docs/backlog/README.md | t=$title awk -F'|' -v c=3 "$item")
    [ -n "$row" ] || echo "error: no row on main"
    printf '%s\n' "$row" | awk -F'|' -v c=2 '{ gsub(/ /, "", $c) } $c != ""' | grep -q . && echo "same item: on main"
    ```

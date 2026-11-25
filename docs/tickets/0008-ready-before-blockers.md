@@ -132,7 +132,7 @@ Checks 1 to 14 are the new behavior, 15 and 16 its other callers, and 17 to 22 t
 4. **Unknown:** a blocker in neither the backlog nor the built lists: `list` prints `waiting on: <title> (not in the backlog or built)`, and `claim next` skips it.
 5. **Order:** a waiting ticket above a free one: `claim next` claims the free one.
 6. **Row gone but not in the index:** a blocker with no row and not in either built list is unknown, so the ticket waits.
-7. **Notes after the list:** `Blocked by: A; B. Part 2 of 3.` reads `A` and `B` only; a cell with no `Blocked by: ` has no blockers, even if it mentions "Blocked by" later.
+7. **Notes after the list:** `Blocked by: A; B. Part 2 of 3.` reads `A` and `B` only; a cell that starts with something else has no blockers, even if it mentions "Blocked by" later (a cell that starts "Blocked by" spelled another way is check 13).
 8. **Linked blocker row:** a blocker whose row's Item is `[<title>](<slug>.md)` is found as not built.
 9. **No index:** `main` with no `docs/tickets/README.md` and no blocked rows: `list` and `claim next` work as before.
 10. **Failed read:** a `ready` row blocked by a title with no row in the backlog, and no `docs/tickets/README.md` on `main`: `list` exits 2 with `couldn't read docs/tickets/README.md`, and prints no `ready` line.
@@ -236,6 +236,12 @@ Built on branch `0008-ready-before-blockers`, claimed by the runner (`runner-49e
 
 **Qodo, on da44031:** found the 3 earlier findings resolved, and 1 new one (a skill insight), checked and fixed:
 1. **`refine-ticket` step 9.1 read both built lists before checking the blocker's row,** so a missing `docs/tickets/README.md` or `docs/README.md` would stop the refinement even for a blocker that still has a row, which isn't a stop and which `ticket.sh` decides without them. Fixed: the snippet checks the row first, and reads the built lists only for a title with no row; a failed read then prints `error: …`, a stop. Run against `main` for a blocker with a row (`not built`), a built one (nothing), and an unknown title (`unknown`).
+
+**Independent review, round 2** (2026-11-25, at the owner's request), on 8f244e3: the same reviewers and models, each in a fresh read-only clone, which was unchanged afterwards, and so were `origin`'s branches. Both checked each earlier fix: all hold, except the doc fixes of round 1's finding 2 and 5, which missed a spot each (findings 2 and 3 here). 4 findings, all checked and fixed:
+1. **Codex (blocking): `refine-ticket`'s snippets passed a title to `awk` with `-v`,** which turns `\n` into a new line, so a blocker titled `Use \n here` missed its row and printed `unknown`, a false stop. The same held for the item's own title in step 9.1's "same item" check, from before this ticket, where it could miss another refinement of the same item. Fixed: the title goes through the environment (`t=$b awk …`, `ENVIRON["t"]`), and the blocker check prints with `printf`. Run under dash with mawk for `Use \n here` with a row (`not built`), `Built \c one` built (nothing), and an unknown title (`unknown`); with `-v` restored, the first prints `unknown`.
+2. **Codex (blocking): this doc's check 7 still said a cell with no `Blocked by: ` has no blockers.** Fixed, as the spec's check 7 says it.
+3. **opencode (blocking): `refine-ticket` step 9.1 checked the list only when the Notes start with exactly `Blocked by: `,** so the stop for a misspelled "Blocked by" was never reached. Fixed: the step starts at "Blocked by" in any spelling, in the skill and in 0003's spec.
+4. **opencode (minor): the backlog's "Blocked items" didn't say a misspelled "Blocked by" makes a ticket wait.** Fixed.
 
 **0007's check 9, the runner's first real run by hand** (2026-11-25, started by the owner in a terminal; see [0007](0007-agent-runner.md), "Delivery and review", check 9):
 - `scripts/agent-run.sh check` passed first: the tools, `bwrap` hiding a folder with no network, the key (mode 600), the client ID, and a token.
