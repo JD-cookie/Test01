@@ -68,7 +68,8 @@ AGENT=runner-abcdef012345
 
 # ---- The scratch setup ---------------------------------------------------------------------
 
-# setup [status of ticket 0042]: a fresh scratch folder $T with origin, keys, and stubs.
+# setup [status of ticket 0042] [its notes] [more backlog rows]: a fresh scratch folder $T with
+# origin, keys, and stubs.
 setup() {
   T=$(mktemp -d "$top/case.XXXX")
   mkdir -p "$T/bin" "$T/calls" "$T/agent" "$T/gh" "$T/config/jd-cookie-agent" "$T/config/gh" "$T/run" "$T/home/.ssh"
@@ -89,7 +90,7 @@ setup() {
   seq 1 120 | jq -R '{name: ("label-" + .)}' | jq -s . >"$T/gh/labels.json"
   echo pass >"$T/check.mode"
   write_stubs
-  local seed=$T/seed status=${1:-ready}
+  local seed=$T/seed status=${1:-ready} notes=${2:-A test ticket.} more=${3:-}
   git init -q -b main "$seed"
   mkdir -p "$seed/docs/backlog" "$seed/scripts" "$seed/src" "$seed/.github/workflows" "$seed/server" "$seed/app"
   echo '{"name":"server"}' >"$seed/server/package.json"
@@ -102,8 +103,9 @@ setup() {
 
 | # | Item | Area | Status | Notes |
 |---|---|---|---|---|
-| 0042 | [Do a thing](0042-thing.md) | Server | $status | A test ticket. |
+| 0042 | [Do a thing](0042-thing.md) | Server | $status | $notes |
 EOF
+  [ -z "$more" ] || printf '%s\n' "$more" >>"$seed/docs/backlog/README.md"
   echo "# Do a thing" >"$seed/docs/backlog/0042-thing.md"
   echo one >"$seed/src/file.txt"
   printf '\000\001\002binary' >"$seed/src/blob.bin"
@@ -340,7 +342,16 @@ expect "exit 0 (was $rc)" [ "$rc" -eq 0 ]
 expect "logs 'no ready ticket'" grep -q 'no ready ticket' "$T/out"
 expect "claude called 0 times" [ "$(claude_calls)" -eq 0 ]
 expect "no claim branch on origin" bash -c "! git -C '$T/origin.git' rev-parse -q --verify refs/heads/0042-thing"
-result 1 "no ticket: no claim, no claude call"
+# A ready ticket waiting on a blocker that isn't built (docs/features/0008-ticket-system.md,
+# check 15) isn't free either. The seed has no docs/tickets/README.md: the blocker has a row.
+setup ready "Blocked by: Build the base. Part 2." "|  | [Build the base](base.md) | Server | designed | |"
+run_runner
+expect "waiting: exit 0 (was $rc)" [ "$rc" -eq 0 ]
+expect "waiting: logs 'no ready ticket'" grep -q 'no ready ticket' "$T/out"
+expect "waiting: claude called 0 times" [ "$(claude_calls)" -eq 0 ]
+expect "waiting: no claim branch on origin" bash -c "! git -C '$T/origin.git' rev-parse -q --verify refs/heads/0042-thing"
+expect "waiting: claim next wasn't run" bash -c "! grep -q 'installing the clone' '$T/out'"
+result 1 "no ticket, or a waiting one: no claim, no claude call"
 
 # ---- 2. Build ------------------------------------------------------------------------------
 

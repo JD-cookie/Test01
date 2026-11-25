@@ -31,9 +31,14 @@
 # Losing a race (exit 3) moves it on to the next ticket. Exit 2 reads the list again once, in case
 # the user withdrew the ticket. Any other failure stops it.
 #
-# Exit codes: 0 claimed (or listed), 2 usage, dirty checkout, or not a ready ticket,
+# A ready ticket whose Notes start "Blocked by: <title>; <title>. …" waits until each item named
+# there is built (see waiting_on): list shows it as "waiting on: …", claim next skips it, and
+# claim refuses it. The spec, with every message: docs/features/0008-ticket-system.md.
+#
+# Exit codes: 0 claimed (or listed), 2 usage, dirty checkout, not a ready ticket (a waiting one
+# included), or a file on main that couldn't be read,
 # 3 already claimed or lost the race (for `claim next`: no free ready ticket left), 4 origin unreachable or the outcome unknown: see the message,
-# 5 claimed, but the ticket was withdrawn or changed on main meanwhile: don't build it, ask the user.
+# 5 claimed, but the ticket was withdrawn, changed, or made to wait on main meanwhile: don't build it, ask the user.
 set -eu
 
 backlog=docs/backlog/README.md
@@ -72,6 +77,67 @@ ticket_status() {
   printf '%s\n' "$rows" | awk -v t="$1" '$1 == t { $1 = ""; sub(/^ /, ""); print }'
 }
 
+# Prints what ready ticket $1 waits on, from the "Blocked by: …" at the start of its row's Notes
+# cell on origin/main, or nothing if it waits on nothing. Each blocker not built is listed, in the
+# row's order, separated by "; ". A blocker is built when no backlog row is named after it and
+# docs/tickets/README.md or docs/README.md on origin/main lists it as "| [<title>](". One in
+# neither place is unknown, and an empty entry counts as one unknown blocker: both make the ticket
+# wait, so a doubt never makes it claimable. The two built lists are read only when a blocker has
+# no row, and a failed read exits 2, so it can't make a blocker look built.
+waiting_on() {
+  w_text=$(git show "origin/main:$backlog") || die 2 "couldn't read $backlog on origin/main"
+  # Prints "row<TAB><title>" for a blocker that has a row, "norow<TAB><title>" for one that
+  # doesn't, and "empty" once if the list has an empty entry.
+  w_found=$(printf '%s\n' "$w_text" | awk -F'|' -v link="](${1}.md)" '
+    function trim(x) { gsub(/^ +| +$/, "", x); return x }
+    /^\|/ { items[n++] = trim($3) }
+    $2 ~ /^ *[0-9][0-9][0-9][0-9] *$/ && index($3, link) && !found { notes = trim($6); found = 1 }
+    END {
+      if (!found) exit
+      if (notes == "Blocked by:") list = ""
+      else if (substr(notes, 1, 12) == "Blocked by: ") list = substr(notes, 13)
+      else exit
+      p = index(list, ". "); if (p) list = substr(list, 1, p - 1)
+      sub(/\.$/, "", list)
+      m = 0
+      while ((p = index(list, "; ")) > 0) { titles[m++] = substr(list, 1, p - 1); list = substr(list, p + 2) }
+      titles[m++] = list
+      empty = 0
+      for (i = 0; i < m; i++) {
+        t = trim(titles[i])
+        if (t == "") { if (!empty) print "empty"; empty = 1; continue }
+        has = 0
+        for (j = 0; j < n; j++) if (items[j] == t || index(items[j], "[" t "](")) { has = 1; break }
+        print (has ? "row" : "norow") "\t" t
+      }
+    }') || die 2 "couldn't read the blockers of $1 in $backlog"
+  [ -n "$w_found" ] || return 0
+  w_built=
+  if printf '%s\n' "$w_found" | grep -q '^norow'; then
+    w_tickets=$(git show "origin/main:docs/tickets/README.md") ||
+      die 2 "couldn't read docs/tickets/README.md on origin/main, so the blockers of $1 can't be checked"
+    w_features=$(git show "origin/main:docs/README.md") ||
+      die 2 "couldn't read docs/README.md on origin/main, so the blockers of $1 can't be checked"
+    w_built=$(printf '%s\n%s\n' "$w_tickets" "$w_features")
+  fi
+  w_out=
+  w_tab=$(printf '\t')
+  while IFS=$w_tab read -r w_kind w_title; do
+    case $w_kind in
+      row) w_add=$w_title ;;
+      norow)
+        if printf '%s\n' "$w_built" | grep -qF -- "| [$w_title]("; then continue; fi
+        w_add="$w_title (not in the backlog or built)" ;;
+      empty) w_add='(an empty entry in "Blocked by")' ;;
+      *) continue ;;
+    esac
+    w_out=${w_out:+$w_out; }$w_add
+  done <<EOF
+$w_found
+EOF
+  printf '%s' "$w_out"
+}
+
 # After a won claim: is the ticket still ready on main, with the design doc it was claimed with?
 # $2 is the claim commit. Its parent is main as it was when the claim was made.
 still_ready() {
@@ -80,12 +146,17 @@ still_ready() {
   now=$(ticket_status "$1")
   [ "$now" = ready ] ||
     die 5 "the claim is yours, but on main $1 is now '${now:-gone}', not 'ready'. Don't build it: ask the user. Leave the branch; only the user releases a claim."
+  # The user may have added a blocker that isn't built while it was claimed.
+  waits=$(waiting_on "$1") || exit $?
+  [ -z "$waits" ] ||
+    die 5 "the claim is yours, but on main $1 is now waiting on: $waits. Don't build it: ask the user. Leave the branch; only the user releases a claim."
   git diff --quiet "$2^" origin/main -- "docs/backlog/$1.md" ||
     die 5 "the claim is yours, but docs/backlog/$1.md changed on main since the claim. Don't build it: ask the user. Leave the branch; only the user releases a claim."
 }
 
 # Prints "<NNNN-slug>  <state>" for each ready ticket on main, in backlog order. The state is
-# "ready" (free to claim), "claimed (…)", or "not claimable: …".
+# "waiting on: …" (a blocker isn't built; shown whatever else is true of the ticket), "ready"
+# (free to claim), "claimed (…)", or "not claimable: …".
 ready_tickets() {
   git fetch -q origin main || die 4 "couldn't reach origin"
   # Checked before it's filtered: an empty list from a failed lookup would show claimed tickets as free.
@@ -98,7 +169,10 @@ ready_tickets() {
       mismatch:*) echo "$slug  not claimable: the row's # column doesn't match the doc's number. Fix the row on main"; continue ;;
       *) continue ;;
     esac
-    if ! git cat-file -e "origin/main:docs/backlog/$slug.md" 2>/dev/null; then
+    waits=$(waiting_on "$slug") || exit $?
+    if [ -n "$waits" ]; then
+      echo "$slug  waiting on: $waits"
+    elif ! git cat-file -e "origin/main:docs/backlog/$slug.md" 2>/dev/null; then
       echo "$slug  not claimable: docs/backlog/$slug.md is missing on main"
     elif printf '%s\n' "$branches" | grep -qx -- "$slug"; then
       echo "$slug  claimed (branch exists on origin)"
@@ -194,6 +268,11 @@ claim() {
   status=$(ticket_status "$ticket")
   [ -n "$status" ] || die 2 "$ticket isn't a numbered ticket in $backlog on origin/main"
   [ "$status" = ready ] || die 2 "$ticket has status '$status' on origin/main, not 'ready'"
+  # Before the checks for the doc and the branches, so a ticket that's both waiting and claimed
+  # gets exit 2, as list shows it as waiting.
+  waits=$(waiting_on "$ticket") || exit $?
+  [ -z "$waits" ] ||
+    die 2 "$ticket is waiting on: $waits. It can be claimed once each one is built; one that's not in the backlog or built needs the row fixed on main."
   git cat-file -e "origin/main:docs/backlog/$ticket.md" 2>/dev/null ||
     die 2 "$ticket is ready but its design doc docs/backlog/$ticket.md is missing on origin/main"
   existing=$(remote_head "$ticket") || die 4 "couldn't reach origin"

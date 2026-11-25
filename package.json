@@ -5,7 +5,7 @@
   "scripts": {
     "prepare": "husky",
     "check": "npm --prefix server run check && npm --prefix app run check && npm run test:scripts",
-    "test:scripts": "bash scripts/test/agent-run.test.sh",
+    "test:scripts": "bash scripts/test/ticket.test.sh && bash scripts/test/agent-run.test.sh",
     "commitlint": "commitlint"
   },
   "devDependencies": {
