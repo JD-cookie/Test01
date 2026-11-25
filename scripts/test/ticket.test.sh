@@ -282,14 +282,15 @@ result 9 "no docs/tickets/README.md and no blocked rows: as before"
 # ---- 10. Failed read -----------------------------------------------------------------------
 
 new_case
-row 0012-thing "Do a thing" ready "Blocked by: Ghost." >>"$T/rows"
+# The free ticket comes first, so a line printed before the failed read would show.
 row 0013-other "Do another" ready "" >>"$T/rows"
+row 0012-thing "Do a thing" ready "Blocked by: Ghost." >>"$T/rows"
 feature "Accounts" >"$T/features"
 setup
 run list
 expect "list exits 2 (was $rc)" [ "$rc" -eq 2 ]
 expect "list says what it couldn't read" err_has "couldn't read docs/tickets/README.md"
-expect "list prints no ready line" bash -c "! grep -q ready '$T/out'"
+expect "list prints no ticket lines" [ ! -s "$T/out" ]
 result 10 "a failed read of docs/tickets/README.md is exit 2, never a free ticket"
 
 # ---- 11. Blocker added after the claim -----------------------------------------------------
@@ -318,7 +319,18 @@ run verify 0012-thing
 expect "an unreadable blocker list after the claim: verify exits 4 (was $rc)" [ "$rc" -eq 4 ]
 expect "it says the claim is yours and to verify" err_has "ticket: the claim is yours, but the blockers of 0012-thing on main couldn't be read (see above). Run: scripts/ticket.sh verify 0012-thing"
 expect "the branch stays on origin" origin_has 0012-thing
-result 11 "a blocker added after the claim: verify exits 5, or 4 if the blockers can't be read"
+# The same when main's backlog itself can't be read after the claim.
+new_case
+row 0012-thing "Do a thing" ready "Nothing yet." >>"$T/rows"
+setup
+run claim 0012-thing tester
+expect "the third claim exits 0 (was $rc)" [ "$rc" -eq 0 ]
+on_main "git rm -q docs/backlog/README.md"
+run verify 0012-thing
+expect "an unreadable backlog after the claim: verify exits 4 (was $rc)" [ "$rc" -eq 4 ]
+expect "it says the claim is yours and to verify" err_has "ticket: the claim is yours, but docs/backlog/README.md on main couldn't be read (see above). Run: scripts/ticket.sh verify 0012-thing"
+expect "the branch stays on origin" origin_has 0012-thing
+result 11 "a blocker added after the claim: verify exits 5, or 4 if the backlog or the blockers can't be read"
 
 # ---- 12. Unchanged cases -------------------------------------------------------------------
 

@@ -149,12 +149,13 @@ EOF
 still_ready() {
   git fetch -q origin main ||
     die 4 "the claim is yours, but main couldn't be fetched to check the ticket is still ready. Run: scripts/ticket.sh verify $1"
-  now=$(ticket_status "$1")
+  # A failed read here, or of the blockers below, comes after the claim is won, so it's exit 4
+  # (the outcome isn't settled: verify), never 2, which says nothing was made.
+  now=$(ticket_status "$1") ||
+    die 4 "the claim is yours, but $backlog on main couldn't be read (see above). Run: scripts/ticket.sh verify $1"
   [ "$now" = ready ] ||
     die 5 "the claim is yours, but on main $1 is now '${now:-gone}', not 'ready'. Don't build it: ask the user. Leave the branch; only the user releases a claim."
   # The user may have added a blocker that isn't built while it was claimed.
-  # A failed read here comes after the claim is won, so it's exit 4 (the outcome isn't settled:
-  # verify), never 2, which says nothing was made.
   waits=$(waiting_on "$1") ||
     die 4 "the claim is yours, but the blockers of $1 on main couldn't be read (see above). Run: scripts/ticket.sh verify $1"
   [ -z "$waits" ] ||

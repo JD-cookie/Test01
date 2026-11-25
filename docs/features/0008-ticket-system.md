@@ -108,6 +108,7 @@ Then it makes the claim (see "Processing"). Its outcomes:
 | 3 | `lost the race for <slug>: another agent created its branch first` |
 | 4 | `couldn't reach origin to check the claim. Your local branch <slug> is kept; run: scripts/ticket.sh verify <slug>`, or `the push failed and origin has no branch <slug>, so nobody holds the claim. Try again.` (after the push's own output) |
 | 4 | `the claim is yours, but main couldn't be fetched to check the ticket is still ready. Run: scripts/ticket.sh verify <slug>` |
+| 4 | `the claim is yours, but docs/backlog/README.md on main couldn't be read (see above). Run: scripts/ticket.sh verify <slug>`, after the failed read's own message |
 | 4 | `the claim is yours, but the blockers of <slug> on main couldn't be read (see above). Run: scripts/ticket.sh verify <slug>`, after the failed read's own message |
 | 5 | `the claim is yours, but on main <slug> is now '<status or gone>', not 'ready'. Don't build it: ask the user. Leave the branch; only the user releases a claim.` |
 | 5 | `the claim is yours, but on main <slug> is now waiting on: <title>. Don't build it: ask the user. Leave the branch; only the user releases a claim.` |
@@ -197,8 +198,8 @@ All are in `scripts/test/ticket.test.sh` unless they say otherwise. Each runs th
 7. **Notes after the list:** `Blocked by: A; B. Part 2 of 3.` reads `A` and `B` only; a cell that starts with something else has no blockers, even if it mentions "Blocked by" later (a cell that starts "Blocked by" spelled another way is check 13).
 8. **Linked blocker row:** a blocker whose row's Item is `[<title>](<slug>.md)` is found as not built.
 9. **No index:** `main` with no `docs/tickets/README.md` and no blocked rows: `list` and `claim next` work as before.
-10. **Failed read:** a `ready` row blocked by a title with no row, and no `docs/tickets/README.md` on `main`: `list` exits 2 with `couldn't read docs/tickets/README.md`, and prints no `ready` line.
-11. **Blocker added after the claim:** after a won claim, `main` gets a commit that adds an unbuilt blocker to the row: `verify 0012-thing` exits 5 with its message. If the new blocker has no row and `main` has no `docs/tickets/README.md`, so the blockers can't be read, it exits 4 with its message, and the branch stays.
+10. **Failed read:** a `ready` row blocked by a title with no row, and no `docs/tickets/README.md` on `main`: `list` exits 2 with `couldn't read docs/tickets/README.md`, and prints no ticket lines, not even for a free ticket above it.
+11. **Blocker added after the claim:** after a won claim, `main` gets a commit that adds an unbuilt blocker to the row: `verify 0012-thing` exits 5 with its message. If the new blocker has no row and `main` has no `docs/tickets/README.md`, so the blockers can't be read, it exits 4 with its message, and the branch stays; so does a `main` with no `docs/backlog/README.md`.
 12. **Unchanged cases:** with their blockers built, a claimed ticket, a missing design doc, and a mismatched number print the same lines as with no blockers.
 13. **Empty entries and a misspelled "Blocked by":** `Blocked by: .`, `Blocked by:`, and `Blocked by: A; ; B` (A and B built): `list` prints `waiting on: (an empty entry in "Blocked by")`. `Blocked By: A.`, `Blocked by:A`, and `blocked by A and B.`: `list` prints `waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")`. `claim next` skips them all.
 14. **Waiting and claimed:** a waiting ticket whose branch is on `origin`: `list` prints its waiting line, and `claim` of it exits 2, not 3.
