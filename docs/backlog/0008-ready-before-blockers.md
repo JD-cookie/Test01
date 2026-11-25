@@ -1,6 +1,6 @@
 # Mark a blocked ticket `ready` before its blockers are built
 
-Status: designed (2026-11-24).
+Status: ready (2026-11-24).
 
 ## Summary
 
@@ -97,7 +97,7 @@ ticket: the claim is yours, but on main NNNN-<slug> is now waiting on: <title>. 
 
 ## Implementation map
 
-- `docs/features/NNNN-ticket-system.md` (new, with this ticket's number): the spec of the ticket system as a whole, which has none today (it was built in PR #7, before the backlog had numbered tickets). Its sections are a spec doc's ("Writing a feature doc" in `docs/README.md`):
+- `docs/features/0008-ticket-system.md` (new, with this ticket's number): the spec of the ticket system as a whole, which has none today (it was built in PR #7, before the backlog had numbered tickets). Its sections are a spec doc's ("Writing a feature doc" in `docs/README.md`):
   - the statuses, and who sets each
   - `scripts/ticket.sh`'s commands (`list`, `claim next`, `claim NNNN-<slug>`, `verify`), each one's output, and every exit code (0, 2, 3, 4, 5) with its messages
   - how a claim is made and decided (the unique claim commit, the create-only push, deciding from what `origin` holds, the check on `main` afterwards), and how it's released
@@ -182,17 +182,18 @@ Refined 2026-11-24 by Claude Code (claude-opus-5-5). It's the second small ticke
   - Codex 2 (minor): `refine-ticket` step 9.8 and 0003's acceptance check 4 say that after the merge `list` shows the ticket as `ready`. Evidence: `.agents/skills/refine-ticket/SKILL.md:208`, `docs/features/0003-refine-ticket-skill.md:174`. Done: fixed: both in the implementation map, saying `ready` or `waiting on: …`.
   - opencode 1 (blocking): when the built lists are read was stated two ways ("if a `ready` row has blockers" against the per-title rule), and checks 10 and 15 (then 10 and 13) didn't say whether the blocker's row exists, so a builder following the first wording would fail the runner's check. Evidence: the doc's "Reading the blockers", last paragraph, and those checks. Done: fixed: the built lists are read only for a blocker with no row; both checks say the blocker's state.
   - opencode 2 (minor): the `claim` refusal said "once they're built" even for an unknown blocker. Done: fixed: it annotates unknown ones as `list` does, and says the row needs fixing.
-  - opencode 3 (minor): the spec doc's name, `NNNN-ticket-system.md`, differs from the ticket's slug, unlike 0003 and 0007. Done: answered: it's the owner's choice (Q4), with its reason in "Decisions made for this ticket"; nothing requires the two slugs to match.
+  - opencode 3 (minor): the spec doc's name, `0008-ticket-system.md`, differs from the ticket's slug, unlike 0003 and 0007. Done: answered: it's the owner's choice (Q4), with its reason in "Decisions made for this ticket"; nothing requires the two slugs to match.
   - opencode 4 (minor): where the waiting check runs in `claim`, relative to the exit-3 and local-branch checks, wasn't said. Evidence: `scripts/ticket.sh:199-203`. Done: fixed: right after the `ready` check, so waiting wins, as in `list`; check 14.
   - Dropped: 0.
 - **Review round 2:** the same reviewers and models, blocking findings only, on acb0e69. Both restatements match. Both checked each round 1 fix and found it holds. Codex: no findings. opencode: no findings. Both clones and the checkout were unchanged afterwards, and so were `origin`'s branches. No round 3: round 2 had no kept blocking findings.
+- **Approved by the user:** 2026-11-24
 
 ## Decisions made for this ticket
 
 - **A blocker that can't be found counts as not built** (Q1, the owner, 2026-11-24): any doubt makes the ticket wait, never claimable early. `refine-ticket` stops the ready PR for one, since it's a typo or a dropped item to fix in the row first.
 - **`claim NNNN-<slug>` refuses a waiting ticket with exit 2** (Q2, 2026-11-24): the existing "not a ready ticket" code, so no caller needs a new case. `claim next` already reads the list again once on exit 2.
 - **The check after a won claim includes blockers** (Q3, 2026-11-24): a blocker the owner adds during a claim is a change to the ticket, like the ones `still_ready` already catches, so exit 5.
-- **A spec doc for the whole ticket system, in this ticket** (Q4, 2026-11-24): the owner chose it over keeping the rules only in the backlog's "How it works" and the script's comments. Named `NNNN-ticket-system.md`, for the capability rather than this ticket's change.
+- **A spec doc for the whole ticket system, in this ticket** (Q4, 2026-11-24): the owner chose it over keeping the rules only in the backlog's "How it works" and the script's comments. Named `0008-ticket-system.md`, for the capability rather than this ticket's change.
 - **Its scope** (Q5, 2026-11-24): statuses, `ticket.sh`'s commands and exit codes, claims, and blockers. Number reservation stays in 0003's spec, which works, and is linked.
 - **Tests for the existing behavior too** (Q6, 2026-11-24): `ticket.sh` has none today, and the runner depends on it. The main cases (checks 17 to 22), not the two-agent race.
 - **No new syntax for "Blocked by"** (2026-11-24): titles, separated by `; `, as the rows write them today, so every existing row reads correctly.
