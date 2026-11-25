@@ -165,7 +165,17 @@ Refined 2026-11-24 by Claude Code (claude-opus-5-5). It's the second small ticke
 
 - **Goal, restated:** for the owner, who approves designs, and for the agents and runner that claim tickets. Today an approved design blocked by unbuilt work can't be marked `ready`, so the owner approves it twice. The smallest change: let a `ready` row keep its "Blocked by", have `scripts/ticket.sh` skip it until each blocker is built (ticket 0006's rule), and have `refine-ticket` stop refusing it. The owner also asked for a spec doc for the ticket system, and tests for `ticket.sh`'s existing behavior.
 - **Is it needed:** already built? No: `scripts/ticket.sh` never reads the Notes column (`tickets()` reads fields 2, 3, and 5), and no spec doc or ticket doc describes waiting tickets (looked in `scripts/`, `docs/features/`, `docs/tickets/`, the skills). Overlaps? "Ticket commands for the user: `new` and `ready`" also changes `ticket.sh`, but other commands; no open PRs. Dropped before? No: `git log -p -- docs/backlog/README.md` shows only this row, added in PR #17.
-- **Definition of Ready:** (filled in after the review rounds)
+- **Definition of Ready:**
+  1. pass: the summary says who it's for, the problem, the current behavior and the wanted one, and what doesn't change
+  2. pass: not built, no overlap, not dropped before (above)
+  3. pass: an out-of-scope list, including the runner's parts 2 and 3 and `ticket.sh new`/`ready`
+  4. pass: one area (the ticket system: `scripts/`, its tests, and its docs), one behavior change with its spec doc, one session
+  5. pass: every output line, message, and exit code, the parsing rules, and the files, with the new ones marked new
+  6. not applicable: no tasks for the user
+  7. pass: 22 checks, each with its setup and result, in `scripts/test/ticket.test.sh` or `agent-run.test.sh`, shown by `npm run test:scripts` in the hook and CI; check 16 by reading
+  8. pass: rule 3 (the docs in the same PR); rules 1, 2, 4, and 5 don't apply
+  9. pass: who triggers it, failed reads, what's logged, and the known gaps
+  10. pass: Q1 to Q6 answered and recorded
 - **Questions and answers:** Q1 an unknown blocker counts as not built, and stops the ready PR → yes. Q2 a named claim of a waiting ticket is exit 2 → yes. Q3 the check after a claim includes blockers → yes. Q4 a spec doc for the ticket system → write it in this ticket. Q5 its scope (statuses, commands, claims, blockers; numbering stays in 0003) → yes. Q6 tests for the existing behavior too → yes, the main cases.
 - **Review round 1:** Codex (gpt-6.1-sol) and opencode (ollama-cloud/deepseek-v4-pro), in a read-only clone of 0a8615b. Both restatements match: the owner approves once, `ticket.sh` makes the ticket wait for its blockers, and `refine-ticket` stops refusing it. Both clones and the checkout were unchanged afterwards (the checkout's only change was this section, written during the round), and so were `origin`'s branches.
   - Codex 1 (blocking): an empty list (`Blocked by: .`) or an empty entry had no defined handling. Evidence: "Reading the blockers" defined only "for each title". Done: fixed: it counts as one unknown blocker, so the ticket waits; check 13.
@@ -175,6 +185,7 @@ Refined 2026-11-24 by Claude Code (claude-opus-5-5). It's the second small ticke
   - opencode 3 (minor): the spec doc's name, `NNNN-ticket-system.md`, differs from the ticket's slug, unlike 0003 and 0007. Done: answered: it's the owner's choice (Q4), with its reason in "Decisions made for this ticket"; nothing requires the two slugs to match.
   - opencode 4 (minor): where the waiting check runs in `claim`, relative to the exit-3 and local-branch checks, wasn't said. Evidence: `scripts/ticket.sh:199-203`. Done: fixed: right after the `ready` check, so waiting wins, as in `list`; check 14.
   - Dropped: 0.
+- **Review round 2:** the same reviewers and models, blocking findings only, on acb0e69. Both restatements match. Both checked each round 1 fix and found it holds. Codex: no findings. opencode: no findings. Both clones and the checkout were unchanged afterwards, and so were `origin`'s branches. No round 3: round 2 had no kept blocking findings.
 
 ## Decisions made for this ticket
 
