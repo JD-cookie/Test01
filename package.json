@@ -1,10 +1,11 @@
 {
   "name": "test01",
   "private": true,
-  "description": "Repo-level tooling: git hooks. The app and server have their own package.json.",
+  "description": "Repo-level tooling: git hooks, commitlint, and the scripts' tests. The app and server have their own package.json.",
   "scripts": {
     "prepare": "husky",
-    "check": "npm --prefix server run check && npm --prefix app run check",
+    "check": "npm --prefix server run check && npm --prefix app run check && npm run test:scripts",
+    "test:scripts": "bash scripts/test/agent-run.test.sh",
     "commitlint": "commitlint"
   },
   "devDependencies": {

@@ -167,6 +167,7 @@ Until `RELEASE_APP_CLIENT_ID` is set, the release workflow's job is skipped rath
 |---|---|
 | `server` | `npm ci` and `npm run check` (typecheck and tests) in `server/`, with a Valkey 9 service container and `VALKEY_URL` set, so the Valkey store tests run too |
 | `app` | `npm ci` and `npm run check` (typegen, lint, typecheck) in `app/` |
+| `scripts` | `npm ci` and `npm run test:scripts` at the root: the runner's tests (see "The runner"). The cases that need a working `bwrap` are skipped where there isn't one |
 
 And `.github/workflows/pr-title.yml` runs on PRs, including when the title is edited:
 
@@ -196,9 +197,10 @@ podman run --rm -v "$PWD:/repo:Z" -w /repo docker.io/rhysd/actionlint:latest -no
 npm run check                  # repo root: everything below
 npm --prefix server run check  # typecheck + API tests, each on a fresh in-memory database
 npm --prefix app run check     # typegen + lint + typecheck
+npm run test:scripts           # the runner's tests (scripts/test/), about two minutes
 ```
 
-The pre-commit hook runs these automatically for the parts you changed (see the README), and CI runs them on every PR.
+The pre-commit hook runs these automatically for the parts you changed (`server/`, `app/`, `scripts/`; see the README), and CI runs them on every PR.
 
 ### Development: the app on your phone with live reload
 
@@ -252,6 +254,16 @@ Once it exists:
 
 Deploy the server before the app because a new app may rely on new endpoints, while older apps keep working with a newer server, per the compatibility rules above.
 
+## The runner
+
+`scripts/agent-run.sh` builds the next `ready` ticket into a PR, with Claude Code in headless mode, as the GitHub App `JD-cookie-Agent` (`jd-cookie-agent[bot]`). The whole design is in [features/0007-agent-runner.md](features/0007-agent-runner.md); this is how to operate it.
+
+- **Setup, once per machine:** the App's key in `~/.config/jd-cookie-agent/app.pem` (mode `600`) and its client ID in `app.env` beside it, Qodo's bot reviews on, and a ruleset on `main` (the spec's "Setup"). Then `scripts/agent-run.sh check` checks the tools, that `bwrap` hides a folder and has no network, the key, and that a token can be made. It changes nothing.
+- **Running it:** `scripts/agent-run.sh`, by hand, from a login session (it needs `XDG_RUNTIME_DIR`). One run does one step and exits: it builds the next free ticket into a PR, or does nothing while one of its PRs is open. It works in its own clone, `~/.local/share/jd-cookie-agent/repo`, never in your checkout. A build takes up to a few hours: three agent tries of up to 45 minutes, each followed by `npm run check` in a sandbox.
+- **Following a run:** the script prints its log as it goes, and keeps it in `~/.local/state/jd-cookie-agent/logs/`. Each run's files (the agent's output, the prompts, saved work) are in `~/.local/state/jd-cookie-agent/runs/`. Its PRs have the label `agent-run`.
+- **`needs-help`:** the runner stopped for you. The PR is a draft, and its description says why, where the run's folder is, and how to restore saved work. Fix what's needed by hand, then mark it ready for review. The runner does nothing more on it. Its usage of Claude counts against your own limits: a usage limit also stops it this way, with the reset time.
+- **After the PR:** take it through Qodo's review as for any PR, and merge or close it. The next run then builds the next ticket. Delete the ticket's branch when you like: until then, it keeps other agents off the ticket.
+
 ## Known gaps and caveats
 
 - **No EAS build yet.** The dev app has run on a phone in Expo Go, but no EAS build has run and no APK has been installed. The variant config and cleartext setting have only been checked with `expo config` and a local bundle export. Remote versioning (`appVersionSource: remote`) starts the Android build number at 1 on the first build.
@@ -265,3 +277,4 @@ Deploy the server before the app because a new app may rely on new endpoints, wh
 
 - Changes before ticket 0006 aren't listed here: git has them.
 - 0006: Keep the spec separate from the ticket history ([ticket](tickets/0006-spec-and-tickets.md))
+- 0007: A runner that builds a ready ticket into a PR ([ticket](tickets/0007-agent-runner.md))

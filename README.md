@@ -97,6 +97,7 @@ The checks run automatically. A [husky](https://typicode.github.io/husky/) `pre-
 |---|---|---|
 | `server/` | `npm --prefix server run check` | `typecheck`, then `test` |
 | `app/` | `npm --prefix app run check` | `typegen`, then `lint`, then `typecheck` |
+| `scripts/` | `npm run test:scripts` (at the root, with the root's `node_modules`) | the runner's tests, about two minutes |
 | anything else (docs, root files) | nothing | |
 
 To run every check by hand: `npm run check` from the repo root.

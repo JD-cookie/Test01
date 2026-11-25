@@ -15,7 +15,12 @@ for part in server app; do
     parts="$parts $part"
   fi
 done
-[ -n "$parts" ] || exit 0
+# The scripts' tests (scripts/test/) run at the repo root, with the root's node_modules.
+scripts=no
+if ! git diff --cached --quiet -- scripts/; then
+  scripts=yes
+fi
+[ -n "$parts" ] || [ "$scripts" = yes ] || exit 0
 
 root=$(git rev-parse --show-toplevel)
 snapshot=$(mktemp -d)
@@ -34,7 +39,19 @@ done
 # Nothing else is copied in from the working tree. Generated files, such as Expo's typed
 # routes, are rebuilt from the snapshot by each part's `check` (see app's `typegen`).
 
+if [ "$scripts" = yes ]; then
+  if [ ! -d "$root/node_modules" ]; then
+    echo "pre-commit: node_modules is missing at the repo root. Run: npm install" >&2
+    exit 1
+  fi
+  ln -s "$root/node_modules" "$snapshot/node_modules"
+fi
+
 for part in $parts; do
   echo "pre-commit: $part has staged changes, running its checks on the staged content"
   npm --prefix "$snapshot/$part" run check
 done
+if [ "$scripts" = yes ]; then
+  echo "pre-commit: scripts has staged changes, running their tests on the staged content"
+  npm --prefix "$snapshot" run test:scripts
+fi
