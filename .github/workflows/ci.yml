@@ -67,8 +67,8 @@ jobs:
       - run: npm ci
       - run: npm run check
 
-  # The scripts' tests: the runner (scripts/agent-run.sh) and its token script, against a local
-  # bare origin and stubs. They run the real commitlint, a root dev dependency. The cases that
+  # The scripts' tests: the ticket script (scripts/ticket.sh), and the runner (scripts/agent-run.sh)
+  # and its token script, against a local bare origin and stubs. They run the real commitlint, a root dev dependency. The cases that
   # need a working bwrap print "skip" where there isn't one.
   scripts:
     runs-on: ubuntu-24.04

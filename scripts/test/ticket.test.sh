@@ -288,7 +288,20 @@ run verify 0012-thing
 expect "verify exits 5 (was $rc)" [ "$rc" -eq 5 ]
 expect "verify says why" err_has "ticket: the claim is yours, but on main 0012-thing is now waiting on: Build the base. Don't build it: ask the user. Leave the branch; only the user releases a claim."
 expect "the branch stays on origin" origin_has 0012-thing
-result 11 "a blocker added after the claim: verify exits 5"
+# The same, with a blocker that has no row and no docs/tickets/README.md to check it in: the
+# blockers can't be read after a won claim, which is exit 4 (run verify), not 2 (nothing made).
+new_case
+row 0012-thing "Do a thing" ready "Nothing yet." >>"$T/rows"
+setup
+run claim 0012-thing tester
+expect "the second claim exits 0 (was $rc)" [ "$rc" -eq 0 ]
+on_main "sed 's/| Nothing yet. |/| Blocked by: Ghost. |/' docs/backlog/README.md >x && mv x docs/backlog/README.md &&
+  rm -f docs/tickets/README.md"
+run verify 0012-thing
+expect "an unreadable blocker list after the claim: verify exits 4 (was $rc)" [ "$rc" -eq 4 ]
+expect "it says the claim is yours and to verify" err_has "ticket: the claim is yours, but the blockers of 0012-thing on main couldn't be read (see above). Run: scripts/ticket.sh verify 0012-thing"
+expect "the branch stays on origin" origin_has 0012-thing
+result 11 "a blocker added after the claim: verify exits 5, or 4 if the blockers can't be read"
 
 # ---- 12. Unchanged cases -------------------------------------------------------------------
 
@@ -315,6 +328,9 @@ new_case
 row 0012-thing "Do a thing" ready "Blocked by: ." >>"$T/rows"
 row 0013-other "Do another" ready "Blocked by: Alpha; ; Beta" >>"$T/rows"
 row 0014-third "Third" ready "Blocked by:" >>"$T/rows"
+row 0015-fourth "Fourth" ready "Blocked By: Alpha." >>"$T/rows"
+row 0016-fifth "Fifth" ready "Blocked by:Alpha" >>"$T/rows"
+row 0017-sixth "Sixth" ready "blocked by Alpha and Beta." >>"$T/rows"
 built "Alpha" >"$T/tickets"
 built "Beta" >>"$T/tickets"
 feature "Accounts" >"$T/features"
@@ -322,11 +338,14 @@ setup
 run list
 expect "list shows each as waiting on an empty entry (exit $rc)" out_is '0012-thing  waiting on: (an empty entry in "Blocked by")
 0013-other  waiting on: (an empty entry in "Blocked by")
-0014-third  waiting on: (an empty entry in "Blocked by")'
+0014-third  waiting on: (an empty entry in "Blocked by")
+0015-fourth  waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")
+0016-fifth  waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")
+0017-sixth  waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")'
 run claim next tester
 expect "claim next exits 3 (was $rc)" [ "$rc" -eq 3 ]
 expect "no branch is made" [ "$(branches)" = "main " ]
-result 13 "empty entries: one unknown blocker, so the ticket waits"
+result 13 "empty entries, and a misspelled 'Blocked by': one unknown blocker, so the ticket waits"
 
 # ---- 14. Waiting and claimed ---------------------------------------------------------------
 

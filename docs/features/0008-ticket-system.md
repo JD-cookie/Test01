@@ -41,6 +41,7 @@ There's no status for waiting: a waiting ticket's row says `ready` and keeps its
 
 An item that can't start until others are built begins its Notes cell with `Blocked by: `, then the items' titles. The blockers are read from the row's Notes cell on `origin/main`:
 - Only a cell that starts `Blocked by: ` (after spaces), or is exactly `Blocked by:`, has blockers. A cell that mentions "Blocked by" later has none.
+- A cell that starts "Blocked by" written any other way, in any case, with or without the colon or the space after it (`Blocked By: A`, `Blocked by:A`, `blocked by A`), counts as one unknown blocker, shown as `(a "Blocked by" not written as "Blocked by: <title>; <title>")`: the owner meant it to wait, and its list isn't read.
 - The list runs to the first `. ` (a period and a space) or to the end of the cell, whichever comes first, and a trailing `.` is dropped. The rest of the cell is free text.
 - Titles are separated by `; `, with spaces trimmed. A title is plain text, as the Item column writes it.
 - An empty list or an empty entry (`Blocked by: .`, `Blocked by: A; ; B`, or `Blocked by:` and nothing else) counts as one unknown blocker, shown as `(an empty entry in "Blocked by")`, once however many empty entries there are, at the place of the first.
@@ -107,6 +108,7 @@ Then it makes the claim (see "Processing"). Its outcomes:
 | 3 | `lost the race for <slug>: another agent created its branch first` |
 | 4 | `couldn't reach origin to check the claim. Your local branch <slug> is kept; run: scripts/ticket.sh verify <slug>`, or `the push failed and origin has no branch <slug>, so nobody holds the claim. Try again.` (after the push's own output) |
 | 4 | `the claim is yours, but main couldn't be fetched to check the ticket is still ready. Run: scripts/ticket.sh verify <slug>` |
+| 4 | `the claim is yours, but the blockers of <slug> on main couldn't be read (see above). Run: scripts/ticket.sh verify <slug>`, after the failed read's own message |
 | 5 | `the claim is yours, but on main <slug> is now '<status or gone>', not 'ready'. Don't build it: ask the user. Leave the branch; only the user releases a claim.` |
 | 5 | `the claim is yours, but on main <slug> is now waiting on: <title>. Don't build it: ask the user. Leave the branch; only the user releases a claim.` |
 | 5 | `the claim is yours, but docs/backlog/<slug>.md changed on main since the claim. Don't build it: ask the user. Leave the branch; only the user releases a claim.` |
@@ -164,7 +166,7 @@ Only the owner releases a claim, by deleting the ticket's branch on `origin`. Th
 
 - **Who triggers it:** whoever runs the script: the owner, an agent, or the runner. It reads `main` and `origin`'s branches, and writes only the claim branch, create-only. Only the owner marks a ticket `ready`, in a PR the owner merges, so only the owner can add or remove a blocker on `main`.
 - **Inputs from the backlog:** the agent name and ticket name end up in the backlog table, so both are checked as whole values (no `|`, spaces, or new lines).
-- **A blocker read wrongly** would let a ticket be built too early, so every doubt counts as not built: an unknown title, an empty entry. The worst case is a ticket that waits until the owner fixes its row.
+- **A blocker read wrongly** would let a ticket be built too early, so every doubt counts as not built: an unknown title, an empty entry, a misspelled "Blocked by". The worst case is a ticket that waits until the owner fixes its row.
 - **`origin` or `main` can't be read:** exit 4 or 2, never an empty list, so a failed read can't show a claimed ticket as free or a blocker as built.
 - **Logging:** only the messages above. `list` and the claim messages say what a ticket waits on.
 - **Configuration:** `TICKET_AGENT`, the default agent name. Nothing else.
@@ -196,9 +198,9 @@ All are in `scripts/test/ticket.test.sh` unless they say otherwise. Each runs th
 8. **Linked blocker row:** a blocker whose row's Item is `[<title>](<slug>.md)` is found as not built.
 9. **No index:** `main` with no `docs/tickets/README.md` and no blocked rows: `list` and `claim next` work as before.
 10. **Failed read:** a `ready` row blocked by a title with no row, and no `docs/tickets/README.md` on `main`: `list` exits 2 with `couldn't read docs/tickets/README.md`, and prints no `ready` line.
-11. **Blocker added after the claim:** after a won claim, `main` gets a commit that adds an unbuilt blocker to the row: `verify 0012-thing` exits 5 with its message.
+11. **Blocker added after the claim:** after a won claim, `main` gets a commit that adds an unbuilt blocker to the row: `verify 0012-thing` exits 5 with its message. If the new blocker has no row and `main` has no `docs/tickets/README.md`, so the blockers can't be read, it exits 4 with its message, and the branch stays.
 12. **Unchanged cases:** with their blockers built, a claimed ticket, a missing design doc, and a mismatched number print the same lines as with no blockers.
-13. **Empty entries:** `Blocked by: .`, `Blocked by:`, and `Blocked by: A; ; B` (A and B built): `list` prints `waiting on: (an empty entry in "Blocked by")`, and `claim next` skips them.
+13. **Empty entries and a misspelled "Blocked by":** `Blocked by: .`, `Blocked by:`, and `Blocked by: A; ; B` (A and B built): `list` prints `waiting on: (an empty entry in "Blocked by")`. `Blocked By: A.`, `Blocked by:A`, and `blocked by A and B.`: `list` prints `waiting on: (a "Blocked by" not written as "Blocked by: <title>; <title>")`. `claim next` skips them all.
 14. **Waiting and claimed:** a waiting ticket whose branch is on `origin`: `list` prints its waiting line, and `claim` of it exits 2, not 3.
 15. **The runner** (`scripts/test/agent-run.test.sh`, its check 1): with its seed's ticket waiting on a blocker whose row is in the seed's backlog, and no `docs/tickets/README.md`, the run logs `no ready ticket`, exits 0, and calls neither `claude` nor `claim next`.
 16. **`refine-ticket`, by reading:** its steps 8 and 9.1 tell the owner a blocked ticket will wait, and stop only for an unknown blocker.

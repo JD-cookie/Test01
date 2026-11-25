@@ -2,7 +2,7 @@
 
 Status: built (2026-11-25).
 
-**Spec docs changed:** `docs/features/0008-ticket-system.md` (new in this PR), [0003-refine-ticket-skill.md](../features/0003-refine-ticket-skill.md), [0007-agent-runner.md](../features/0007-agent-runner.md), [docs/README.md](../README.md).
+**Spec docs changed:** `docs/features/0008-ticket-system.md` (new in this PR), [0003-refine-ticket-skill.md](../features/0003-refine-ticket-skill.md), [0007-agent-runner.md](../features/0007-agent-runner.md), [docs/README.md](../README.md), [docs/devops.md](../devops.md).
 
 ## Summary
 
@@ -219,8 +219,19 @@ Built on branch `0008-ready-before-blockers`, claimed by the runner (`runner-49e
 - `AGENTS.md`'s line for `scripts/ticket.sh` now links the spec doc, which the implementation map didn't list.
 - The new spec doc has one known gap more than this doc: a blocker added after a claim's check on `main` isn't noticed, since nothing checks again.
 
-**Not changed, for the owner:** the comment above CI's `scripts` job in `.github/workflows/ci.yml` still says the job runs the runner's tests only. It now runs `ticket.test.sh` too, through `npm run test:scripts`, with no change to the workflow. The runner's App can't push workflow changes, so that comment is left for a PR by the owner.
+**Left for the owner, then done:** the comment above CI's `scripts` job in `.github/workflows/ci.yml` said the job runs the runner's tests only. It now runs `ticket.test.sh` too, through `npm run test:scripts`, with no change to the workflow. The runner's App can't push workflow changes, so the agent left it, and said so. The owner's session fixed it in this PR, with the two lines of `docs/devops.md` that said the same (its CI table's `scripts` row and its `test:scripts` line), which the agent hadn't found; so `docs/devops.md` is a spec doc this ticket changed too.
 
-**Review:** (filled in once the PR has been reviewed)
+**Review:** Qodo reviewed b39927d, the runner's PR as the App (so setup task 3 of 0007, Qodo's bot reviews, works). 3 findings, all checked against the code and fixed in this PR, as the owner's session, with a test that fails when its fix is undone in a scratch copy:
+1. **Bug: a misspelled "Blocked by" let a ticket be built early.** `waiting_on()` read blockers only after exactly `Blocked by: `, so `Blocked By: A`, `Blocked by:A`, or `blocked by A` read as no blockers, against "every doubt counts as not built". Fixed: a cell that starts "Blocked by" in any other spelling counts as one unknown blocker, `(a "Blocked by" not written as "Blocked by: <title>; <title>")`. Test: check 13 has the three spellings.
+2. **Low: the index row said `(open)`, not the PR.** Fixed: `#22`.
+3. **Bug: a failed read after a won claim exited 2.** `still_ready` passed on `waiting_on()`'s exit 2, which tells callers nothing was made, and makes `claim next` try the next ticket, though the claim branch exists. Fixed: exit 4, `the claim is yours, but the blockers of <slug> on main couldn't be read (see above). Run: scripts/ticket.sh verify <slug>`. Test: check 11's second case (a blocker with no row, and no `docs/tickets/README.md`) exits 4.
+
+**0007's check 9, the runner's first real run by hand** (2026-11-25, started by the owner in a terminal; see [0007](0007-agent-runner.md), "Delivery and review", check 9):
+- `scripts/agent-run.sh check` passed first: the tools, `bwrap` hiding a folder with no network, the key (mode 600), the client ID, and a token.
+- The run started at 05:04:58Z. It cloned the repo into its own folder, installed the dependencies, and claimed this ticket with `claim next` at 05:05:32Z, as `runner-49e67a9555ee`: 0008, the first free ticket, above 0004.
+- Try 1 of 3: the agent ran for 32 minutes and exited 0. `npm run check` passed in the sandbox in under 2 minutes, and so did the PR title (commitlint) and the `Ticket:` line.
+- It pushed the branch and opened PR #22 as `app/jd-cookie-agent`, labelled `agent-run`, not a draft, at 05:39:35Z, 35 minutes after it started. No stop for help, and no second try.
+- CI on b39927d: app, server, scripts, and pr-title passed. Qodo reviewed it, as above.
+- Where the owner stepped in: starting the run, and the Qodo findings above, fixed by the owner's session, since the runner's review rounds are part 2.
 
 **Rules, skills, and reviewers' context:** nothing to change found while building it.

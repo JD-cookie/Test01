@@ -82,12 +82,14 @@ ticket_status() {
 # row's order, separated by "; ". A blocker is built when no backlog row is named after it and
 # docs/tickets/README.md or docs/README.md on origin/main lists it as "| [<title>](". One in
 # neither place is unknown, and an empty entry counts as one unknown blocker: both make the ticket
-# wait, so a doubt never makes it claimable. The two built lists are read only when a blocker has
+# wait, so a doubt never makes it claimable. So does a cell that starts "Blocked by" spelled any
+# other way ("Blocked By: A", "Blocked by:A", "blocked by A"): the owner meant it to wait. The two built lists are read only when a blocker has
 # no row, and a failed read exits 2, so it can't make a blocker look built.
 waiting_on() {
   w_text=$(git show "origin/main:$backlog") || die 2 "couldn't read $backlog on origin/main"
   # Prints "row<TAB><title>" for a blocker that has a row, "norow<TAB><title>" for one that
-  # doesn't, and "empty" once if the list has an empty entry.
+  # doesn't, "empty" once if the list has an empty entry, and only "malformed" for a cell that
+  # starts "Blocked by" written another way.
   w_found=$(printf '%s\n' "$w_text" | awk -F'|' -v link="](${1}.md)" '
     function trim(x) { gsub(/^ +| +$/, "", x); return x }
     /^\|/ { items[n++] = trim($3) }
@@ -96,6 +98,7 @@ waiting_on() {
       if (!found) exit
       if (notes == "Blocked by:") list = ""
       else if (substr(notes, 1, 12) == "Blocked by: ") list = substr(notes, 13)
+      else if (tolower(notes) ~ /^blocked[ \t]*by/) { print "malformed"; exit }
       else exit
       p = index(list, ". "); if (p) list = substr(list, 1, p - 1)
       sub(/\.$/, "", list)
@@ -129,6 +132,7 @@ waiting_on() {
         if printf '%s\n' "$w_built" | grep -qF -- "| [$w_title]("; then continue; fi
         w_add="$w_title (not in the backlog or built)" ;;
       empty) w_add='(an empty entry in "Blocked by")' ;;
+      malformed) w_add='(a "Blocked by" not written as "Blocked by: <title>; <title>")' ;;
       *) continue ;;
     esac
     w_out=${w_out:+$w_out; }$w_add
@@ -147,7 +151,10 @@ still_ready() {
   [ "$now" = ready ] ||
     die 5 "the claim is yours, but on main $1 is now '${now:-gone}', not 'ready'. Don't build it: ask the user. Leave the branch; only the user releases a claim."
   # The user may have added a blocker that isn't built while it was claimed.
-  waits=$(waiting_on "$1") || exit $?
+  # A failed read here comes after the claim is won, so it's exit 4 (the outcome isn't settled:
+  # verify), never 2, which says nothing was made.
+  waits=$(waiting_on "$1") ||
+    die 4 "the claim is yours, but the blockers of $1 on main couldn't be read (see above). Run: scripts/ticket.sh verify $1"
   [ -z "$waits" ] ||
     die 5 "the claim is yours, but on main $1 is now waiting on: $waits. Don't build it: ask the user. Leave the branch; only the user releases a claim."
   git diff --quiet "$2^" origin/main -- "docs/backlog/$1.md" ||
