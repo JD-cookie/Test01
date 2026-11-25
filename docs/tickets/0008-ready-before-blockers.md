@@ -1,6 +1,8 @@
 # Mark a blocked ticket `ready` before its blockers are built
 
-Status: ready (2026-11-24).
+Status: built (2026-11-25).
+
+**Spec docs changed:** `docs/features/0008-ticket-system.md` (new in this PR), [0003-refine-ticket-skill.md](../features/0003-refine-ticket-skill.md), [0007-agent-runner.md](../features/0007-agent-runner.md), [docs/README.md](../README.md).
 
 ## Summary
 
@@ -42,7 +44,7 @@ The blockers are read from a row's Notes cell (the fifth column, `awk -F'|'` fie
 - **An empty list or an empty entry** (`Blocked by: .`, `Blocked by: A; ; B`, or `Blocked by:` and nothing else) counts as one unknown blocker, shown as `(an empty entry in "Blocked by")`. So a row whose list can't be read is never claimable.
 
 For each title:
-- **Not built, in the backlog:** a row's Item column (field 3) is the title, or a link whose text is the title (`[<title>](`). That's the same match `refine-ticket` step 9 uses.
+- **Not built, in the backlog:** a row's Item column (field 3) is the title, or starts with a link whose text is the title (`[<title>](`). That's the same match `refine-ticket` step 9 uses.
 - **Built:** no such row, and the title is in `docs/tickets/README.md` or `docs/README.md` on `origin/main`, as `| [<title>](`.
 - **Unknown:** neither, for example a typo, or a blocker that was dropped. It counts as not built, so the ticket is never claimed past a blocker nobody can find.
 
@@ -81,7 +83,7 @@ ticket: the claim is yours, but on main NNNN-<slug> is now waiting on: <title>. 
 ### `refine-ticket`
 
 - **Step 8:** if the row says "Blocked by: …" and something it names isn't built, tell the owner that the ticket will be marked `ready` but wait until those are built, naming them, and ask "Mark it ready?" as usual. Don't stop.
-- **Step 9.1:** the check prints `not built: <title>` for a blocker that isn't built, as information for the PR's description, not a stop. It stops only for an **unknown** blocker: `unknown: <title> (not in the backlog or built)`, since that's a typo or a dropped item, which the owner fixes in the row first.
+- **Step 9.1:** the check prints `not built: <title>` for a blocker that isn't built, as information for the PR's description, not a stop. It stops only for an **unknown** blocker: `unknown: <title> (not in the backlog or built)`, since that's a typo or a dropped item, which the owner fixes in the row first. An empty entry in the list stops it too, since `scripts/ticket.sh` counts it as an unknown blocker.
 - The PR's description names the blockers it waits on.
 
 ## Security and failure modes
@@ -108,10 +110,11 @@ ticket: the claim is yours, but on main NNNN-<slug> is now waiting on: <title>. 
 
   What's left to the other docs: how numbers are given and reserved stays in `docs/features/0003-refine-ticket-skill.md`, which this doc links. Building a ticket stays in "How it works" and the `next-ticket` skill.
 - `docs/README.md`: a Features row for the new doc, and a Changes line.
-- `scripts/ticket.sh`: the blocker reading, `list`'s waiting state, `claim`'s refusal, `still_ready`'s check, and the header comment's exit codes.
-- `scripts/test/ticket.test.sh` (new): tests against a scratch bare `origin`, like `scripts/test/agent-run.test.sh`.
-- `scripts/test/agent-run.test.sh`: one case, a waiting ticket.
-- `package.json`: `test:scripts` runs both test files.
+- `scripts/ticket.sh`: the blocker reading (`waiting_on()`, one `awk` pass over `main`'s backlog, then the two built lists only for a blocker with no row), `list`'s waiting state, `claim`'s refusal, `still_ready`'s check, and the header comment's exit codes.
+- `scripts/test/ticket.test.sh` (new): tests against a scratch bare `origin`, like `scripts/test/agent-run.test.sh`, one `ok N` per acceptance check (1 to 14 and 17 to 22).
+- `scripts/test/agent-run.test.sh`: one case, a waiting ticket, as part of its check 1 ("no ticket"), whose `setup` now also takes the ticket's notes and extra backlog rows.
+- `package.json`: `test:scripts` runs both test files, `ticket.test.sh` first.
+- `AGENTS.md`: the table's line for `scripts/ticket.sh` links the new spec doc and names its tests.
 - `docs/backlog/README.md`: "Statuses" (`ready`), "How it works" ("Marking it ready", "Blocked items"), and a link to the new spec doc for the claim rules.
 - `.agents/skills/refine-ticket/SKILL.md`: steps 8, 9.1, 9.7, and 9.8 (once merged, `list` shows the ticket as `ready`, or as `waiting on: …` if a blocker isn't built).
 - `.agents/skills/next-ticket/SKILL.md`: step 1 says `claim next` skips waiting tickets.
@@ -161,7 +164,7 @@ None. After this merges, the owner can mark the runner's parts 2 and 3 `ready` (
 
 ## Readiness review
 
-Refined 2026-11-24 by Claude Code (claude-opus-5-5). It's the second small ticket of [0007](../tickets/0007-agent-runner.md)'s task 5: the runner's first real run by hand (its check 9) builds it.
+Refined 2026-11-24 by Claude Code (claude-opus-5-5). It's the second small ticket of [0007](0007-agent-runner.md)'s task 5: the runner's first real run by hand (its check 9) builds it.
 
 - **Goal, restated:** for the owner, who approves designs, and for the agents and runner that claim tickets. Today an approved design blocked by unbuilt work can't be marked `ready`, so the owner approves it twice. The smallest change: let a `ready` row keep its "Blocked by", have `scripts/ticket.sh` skip it until each blocker is built (ticket 0006's rule), and have `refine-ticket` stop refusing it. The owner also asked for a spec doc for the ticket system, and tests for `ticket.sh`'s existing behavior.
 - **Is it needed:** already built? No: `scripts/ticket.sh` never reads the Notes column (`tickets()` reads fields 2, 3, and 5), and no spec doc or ticket doc describes waiting tickets (looked in `scripts/`, `docs/features/`, `docs/tickets/`, the skills). Overlaps? "Ticket commands for the user: `new` and `ready`" also changes `ticket.sh`, but other commands; no open PRs. Dropped before? No: `git log -p -- docs/backlog/README.md` shows only this row, added in PR #17.
@@ -197,3 +200,27 @@ Refined 2026-11-24 by Claude Code (claude-opus-5-5). It's the second small ticke
 - **Its scope** (Q5, 2026-11-24): statuses, `ticket.sh`'s commands and exit codes, claims, and blockers. Number reservation stays in 0003's spec, which works, and is linked.
 - **Tests for the existing behavior too** (Q6, 2026-11-24): `ticket.sh` has none today, and the runner depends on it. The main cases (checks 17 to 22), not the two-agent race.
 - **No new syntax for "Blocked by"** (2026-11-24): titles, separated by `; `, as the rows write them today, so every existing row reads correctly.
+- **A linked blocker row matches only when the link starts the Item cell** (the builder, 2026-11-25): "Reading the blockers" says the match is the one `refine-ticket` step 9 uses, and that one is `index(x, "[" t "](") == 1`. Every linked row starts with its link.
+- **`refine-ticket` step 9.1 also stops for an empty entry** (the builder, 2026-11-25): the doc's rule for the skill stops for an unknown blocker, and "Reading the blockers" counts an empty entry as one. The skill's per-title loop can't see an empty entry, so the step says it in words.
+
+## Delivery and review
+
+Built on branch `0008-ready-before-blockers`, claimed by the runner (`runner-49e67a9555ee`, claim `faedb9c9`), by Claude Code (claude-opus-5-5) as the runner's agent: the runner's first real run by hand, 0007's check 9.
+
+**Acceptance checks:**
+- 1 to 14 and 17 to 22: `scripts/test/ticket.test.sh` prints `ok N` for each, through `npm run test:scripts`, run by hand, in the pre-commit hook, and by the runner's checks. To see that they test something, `waiting_on()` was made to return at once for one run: checks 1, 3 to 8, 10, 11, 13, and 14 failed, and the rest, which don't depend on blockers being read, passed.
+- 15: `scripts/test/agent-run.test.sh`'s check 1 has the waiting case: a run logs `no ready ticket`, exits 0, calls `claude` 0 times, makes no claim branch, and doesn't reach `claim next` (no `installing the clone's dependencies` in its log).
+- 16: by reading: `.agents/skills/refine-ticket/SKILL.md` steps 8 and 9.1, in this PR's diff.
+
+**What changed from the version marked ready:**
+- `claim`'s and `list`'s message for a failed read of a built list is `couldn't read docs/tickets/README.md on origin/main, so the blockers of <slug> can't be checked` (or the same for `docs/README.md`): it starts with the text check 10 names, and says why it was read.
+- The runner's waiting case is part of `agent-run.test.sh`'s check 1, not a check of its own, so 0007's numbering stays: it's 0007's "no ticket" check with another kind of no free ticket.
+- The two decisions above, by the builder.
+- `AGENTS.md`'s line for `scripts/ticket.sh` now links the spec doc, which the implementation map didn't list.
+- The new spec doc has one known gap more than this doc: a blocker added after a claim's check on `main` isn't noticed, since nothing checks again.
+
+**Not changed, for the owner:** the comment above CI's `scripts` job in `.github/workflows/ci.yml` still says the job runs the runner's tests only. It now runs `ticket.test.sh` too, through `npm run test:scripts`, with no change to the workflow. The runner's App can't push workflow changes, so that comment is left for a PR by the owner.
+
+**Review:** (filled in once the PR has been reviewed)
+
+**Rules, skills, and reviewers' context:** nothing to change found while building it.

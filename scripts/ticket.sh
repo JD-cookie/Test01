@@ -107,7 +107,7 @@ waiting_on() {
         t = trim(titles[i])
         if (t == "") { if (!empty) print "empty"; empty = 1; continue }
         has = 0
-        for (j = 0; j < n; j++) if (items[j] == t || index(items[j], "[" t "](")) { has = 1; break }
+        for (j = 0; j < n; j++) if (items[j] == t || index(items[j], "[" t "](") == 1) { has = 1; break }
         print (has ? "row" : "norow") "\t" t
       }
     }') || die 2 "couldn't read the blockers of $1 in $backlog"

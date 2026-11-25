@@ -117,7 +117,7 @@ After the fixes, run the next round. Stop when a round has no kept **blocking** 
 
 ## 8. Ask the user for approval
 
-When every Definition of Ready item passes or doesn't apply, and the last review round had no kept blocking findings, write the doc's **Readiness review** section (below). If the row says "Blocked by: …" and something it names isn't built yet, tell the user the doc is ready but the item can't be marked `ready` until then, and stop. Otherwise, show the user:
+When every Definition of Ready item passes or doesn't apply, and the last review round had no kept blocking findings, write the doc's **Readiness review** section (below). If the row says "Blocked by: …" and something it names isn't built yet, tell the user that the ticket will be marked `ready` but will wait until those are built, naming them: `scripts/ticket.sh` doesn't let anyone claim it before then (see the ticket system's spec, [`docs/features/0008-ticket-system.md`](../../../docs/features/0008-ticket-system.md)). Don't stop. Show the user:
 - the goal, restated
 - the Definition of Ready results
 - what changed in the doc, and the questions and answers
@@ -136,7 +136,7 @@ In the commands below, `$title` is the item's title exactly as it is in its row 
 
 The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`), never a dollar sign and the column number. When Claude Code loads a skill with arguments, it replaces each `$` followed by a digit with a word of the arguments, even inside code.
 
-1. **Check the item and find the next free number.** On a fresh `origin/main`, the item's row must still have no number and not be `ready`. If it has one, someone else marked it ready: stop and tell the user. If its Notes start with "Blocked by: …", each item named there must be built: its row is gone from the backlog, and it's listed in `docs/tickets/README.md`, or, for features built before the backlog (0001 and 0002), in the Features table of `docs/README.md`. Run this for each title named there, set as `b`; it prints nothing for a built item:
+1. **Check the item and find the next free number.** On a fresh `origin/main`, the item's row must still have no number and not be `ready`. If it has one, someone else marked it ready: stop and tell the user. If its Notes start with "Blocked by: …", check each item named there. It's built if its row is gone from the backlog and it's listed in `docs/tickets/README.md`, or, for features built before the backlog (0001 and 0002), in the Features table of `docs/README.md`. Run this for each title named there, set as `b`; it prints nothing for a built item:
 
    ```sh
    b='<a title from "Blocked by">' &&
@@ -144,13 +144,13 @@ The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`)
    backlog=$(git show origin/main:docs/backlog/README.md) &&
    built=$(git show origin/main:docs/tickets/README.md && git show origin/main:docs/README.md) &&
    if printf '%s\n' "$backlog" | awk -F'|' -v c=3 -v t="$b" '{ x = $c; gsub(/^ +| +$/, "", x) } x == t || index(x, "[" t "](") == 1' | grep -q .; then
-     echo "not built: $b (its row is still in the backlog)"
+     echo "not built: $b"
    elif ! printf '%s\n' "$built" | grep -qF "| [$b]("; then
-     echo "not built: $b (not in docs/tickets/README.md or the Features table)"
+     echo "unknown: $b (not in the backlog or built)"
    fi
    ```
 
-   If it prints `not built`, stop and tell the user: a blocked item isn't marked ready until what blocks it is built. The number must be unused on `main`, in `docs/features/` and `docs/tickets/`, and in every ticket and reservation branch on `origin`:
+   A `not built` line isn't a stop: the ticket is marked `ready` and waits for that item, and the PR's description names it (step 7). An `unknown` line is a stop: the title is a typo, or names an item that was dropped, so tell the user, who fixes the row first. A `Blocked by` with an empty entry (`Blocked by: .`, or `A; ; B`) is a stop too, for the same reason: `scripts/ticket.sh` would treat it as an unknown blocker. The number must be unused on `main`, in `docs/features/` and `docs/tickets/`, and in every ticket and reservation branch on `origin`:
 
    ```sh
    git fetch -q origin &&
@@ -204,8 +204,8 @@ The `awk` commands name the table's column with a variable (`-v c=2`, then `$c`)
    ```
 
    The row is the item's one stable mark: a refinement may create the doc or rename it, but every ready PR changes the row's number and status. `$item` matches a row by its Item column only (`awk` field 3: field 1 is the empty text before the first `|`, and field 2 is `#`), as the plain title or as a link's text: another row's Notes can link to this item, and must not count as its row. The last three lines repeat step 1's check of the row on `main`: another ready PR for this item may have merged since then, and its branch is gone, so the loop can't see it. If it prints `same item` or `error`, don't open the PR. Tell the user, and let them choose which branch to keep. Never delete another agent's branch. Each agent checks after its own push, so two racing on one item can't both miss each other: at worst, both stop and ask.
-7. **Open the PR** from `ready-$n` to `main`, with a Conventional Commits title like the commit's. The body says which ticket, the number and how it was chosen, and links the Readiness review section. End with the attribution line. Link the PR in T3 Code if that tool is available.
-8. **Take it through review** like any PR (see `next-ticket`, step 4). The user merges it. Never merge it yourself. Once it's merged, `scripts/ticket.sh list` shows the ticket as `ready`.
+7. **Open the PR** from `ready-$n` to `main`, with a Conventional Commits title like the commit's. The body says which ticket, the number and how it was chosen, and links the Readiness review section. If step 1 printed `not built` lines, it names the items the ticket waits on. End with the attribution line. Link the PR in T3 Code if that tool is available.
+8. **Take it through review** like any PR (see `next-ticket`, step 4). The user merges it. Never merge it yourself. Once it's merged, `scripts/ticket.sh list` shows the ticket as `ready`, or as `waiting on: …` if a blocker isn't built yet.
 
 ## The Readiness review section
 
