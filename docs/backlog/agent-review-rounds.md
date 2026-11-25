@@ -61,13 +61,17 @@ Steps:
    - If the last finished round's `pushed` isn't on `origin`: if the clone has that commit, push it. If not, stop for help: "Round N's commits were lost before the push."
    - If its marker has replies that aren't posted yet (no reply by the App on that comment with the marker `round=N`), post them.
    - An `Agent round N started` with no `Agent round N` after it is a round that died before its report. It counts toward the limit (step 5), and nothing else: its head still needs a round.
-2. **Wait for the review.** Qodo is done with the head commit when its review comment, the issue comment by `qodo-code-review[bot]` whose body contains `<h3>Code Review by Qodo</h3>`, contains `<!-- https://github.com/<owner>/<repo>/commit/<head sha> -->`. Qodo's comments start with a blank line or with the heading, so the runner matches the heading anywhere, never as a prefix. Its other comment, `<h3>PR Summary by Qodo</h3>`, names the same commit, and doesn't count. CI is done when `gh pr checks` lists at least one check and none is pending. No checks at all means CI hasn't started yet.
+2. **Wait for the review.** Qodo is done with the head commit when its review comment, the issue comment by `qodo-code-review[bot]` whose body contains `<h3>Code Review by Qodo</h3>`, contains `<!-- https://github.com/<owner>/<repo>/commit/<head sha> -->` (the full 40-character sha), **and** that comment's `updated_at` is at least `QODO_QUIET` (10 minutes) ago. Qodo's comments start with a blank line or with the heading, so the runner matches the heading anywhere, never as a prefix. Its other comment, `<h3>PR Summary by Qodo</h3>`, names the same commit, and doesn't count. The quiet time is because Qodo reviews in two passes: on PR #22, 28 seconds after the push of da44031 it edited its review comment to name da44031 with only the earlier findings marked resolved, and 2.5 minutes later it edited it again with a new finding (GraphQL `userContentEdits` of comment 7154060156). Across #22's 9 pushes, every edit came within about 3 minutes of a push, and none without one.
+
+   CI is done when the head commit's check runs (`gh api --paginate repos/<owner>/<repo>/commits/<head sha>/check-runs`, the `check_runs` list) number at least one, and every one has `status` `completed`. No check runs at all means CI hasn't started yet. A check run failed if its `conclusion` is anything but `success`, `neutral`, or `skipped`. CI here is GitHub Actions only, so the commit status API isn't used: on #22's head it says `pending` with 0 statuses. Every call is `gh api`, as in part 1, not `gh pr checks`.
    - **Either isn't done:** exit, and check again next run.
-   - **Still not done 60 minutes after the head commit was pushed:** stop for help: "Qodo or CI hasn't finished reviewing <sha> after 60 minutes." The push time is the time of the finished round whose `pushed` is that commit, or the PR's creation time for the first head.
+   - **Still not done 60 minutes after the head commit arrived:** stop for help: "Qodo or CI hasn't finished reviewing <sha> after 60 minutes." GitHub doesn't record when a commit was pushed (GraphQL's `pushedDate` is null for #22's commits), so the clock starts at the newest of: the PR's `created_at`, the head commit's committer date, the newest `Agent round N` comment's `created_at`, and the newest `unlabeled` event for `needs-help` in the PR's timeline. So a commit the user pushes before removing `needs-help` gets its full 60 minutes too.
 3. **Collect what's new since the last finished round's `cutoff`** (or since the PR opened), for the round prompt. A comment, review comment, or review counts as new if its `updated_at` is after the cutoff, so an edited one counts too:
    - Qodo's whole review comment: some findings are only there.
    - Everything by `qodo-code-review[bot]` and by the repo owner (`gh api repos/<owner>/<repo> --jq .owner.login`): inline review comments, the PR's own comments, and the bodies of reviews (`pulls/<n>/reviews`), such as a "Request changes" with no inline comment.
-   - For each failed CI job, its failed log lines (`gh run view <id> --log-failed`, the last 200 lines).
+   - For each failed check run, the last 200 lines of its job's log: `gh api repos/<owner>/<repo>/actions/jobs/<id>/logs`, where `<id>` is the check run's `id`, which for GitHub Actions is the job's id (on #22's head, check run 139383943799, `scripts`, has the `details_url` `…/job/139383943799`).
+
+   A review whose body is empty is left out: inline comments each come with a review of their own with an empty body, by Qodo and by the owner alike (all 8 reviews on PR #20). The owner's comments include those the owner's own sessions post with the owner's `gh` login: they're the owner's account.
 
    Comments from anyone else are left out: the repo is public, so anyone can comment, and the agent would read their text as instructions. The runner's own comments, by `jd-cookie-agent[bot]`, are left out too.
 4. **Is a round needed?** A round runs if any of these holds:
@@ -107,7 +111,7 @@ As in part 1, with a third prompt, `scripts/agent-run/round.md`, with the same t
   - Rule 1 (count before you check): a round is recorded on GitHub (`Agent round N started`) before it runs, and counted from there, and only one run works at a time (the lock).
   - Rule 2: the records are on GitHub, in the PR's comments, not in the runner.
   - Rule 3: `docs/devops.md`'s runner section gets the review step in the same PR.
-- **No new settings:** the round limit (4) and the wait (60 minutes) are constants at the top of `agent-run.sh`.
+- **No new settings:** the round limit (4), the wait (60 minutes), and Qodo's quiet time (`QODO_QUIET`, 10 minutes) are constants at the top of `agent-run.sh`. For the tests only, `AGENT_RUN_NOW` sets the runner's clock, so the 60 minutes and the quiet time can be tested without waiting.
 
 ## Tasks for the user
 
@@ -117,7 +121,7 @@ None new. Part 1's Qodo setting ("Allow GitHub bot reviews") must be on before t
 
 - `scripts/agent-run.sh`: the review step, the records, and the changes to part 1.
 - `scripts/agent-run/round.md` (new): the round prompt.
-- `scripts/test/agent-run.test.sh`: checks 1 to 6 below, with fixtures for Qodo's comments copied from real ones on PRs #10 and #12, which start with a blank line or `<h3>`.
+- `scripts/test/agent-run.test.sh`: checks 1 to 6 below, with fixtures for Qodo's comments copied from real ones on PRs #10, #12, and #22 (the App's PR: its review comment, and its two edits after the push of da44031), which start with a blank line or `<h3>`.
 - The runner's spec doc, `docs/features/0007-agent-runner.md`: the review step and the changes to part 1, edited in place, with a Changes line.
 - `docs/devops.md`: the review step in the runner's section.
 
@@ -125,7 +129,7 @@ None new. Part 1's Qodo setting ("Allow GitHub bot reviews") must be on before t
 
 All are in `scripts/test/agent-run.test.sh`, on part 1's scratch setup, with the `gh` fixtures' lists long enough to need a second page, and the deciding comment or event on the last one. Each passes when the script prints `ok N`.
 
-1. **Waits for Qodo and CI:** with an open `agent-run` PR whose Qodo review comment names an older commit, a run calls `claude` 0 times and changes nothing. The same with Qodo done and a CI check pending, and with Qodo done and no checks listed at all. With Qodo's "PR Summary" comment naming the head and its review comment an older commit, it still waits. With the push 61 minutes ago, it adds `needs-help`.
+1. **Waits for Qodo and CI:** with an open `agent-run` PR whose Qodo review comment names an older commit, a run calls `claude` 0 times and changes nothing. The same with Qodo done and a check run `in_progress`, and with Qodo done and no check runs at all. With Qodo's "PR Summary" comment naming the head and its review comment an older commit, it still waits. With the review comment naming the head but edited 5 minutes ago (#22's first edit), it waits; with the same comment edited 11 minutes ago, it runs a round. With the clock's start 61 minutes ago, it adds `needs-help`. With an old head commit but `needs-help` removed 5 minutes ago, it waits and doesn't add `needs-help`.
 2. **Round:** with Qodo's review comment (`Code Review by Qodo`) for the head commit and one new Qodo inline comment, a run calls `claude` once with the round prompt, which contains that comment's text. It posts `Agent round 1 started` before calling `claude`, posts `Agent round 1` with `pushed` naming the new commit, then pushes, then posts the reply from `replies.json` to that comment's id. With a failed CI job, its failed log lines are in the round prompt. With an owner's review body (a review with no inline comment), its text is in the prompt.
    - **Bad agent output:** with `replies.json` not valid JSON, naming a comment id that wasn't collected, naming one twice, or leaving one out, the try fails.
 3. **Only Qodo and the owner:** a comment from another account, containing `IGNORE-ME`, is not in the round prompt. One from the owner is, both inline and on the PR itself. A comment by `jd-cookie-agent[bot]`, containing `MINE`, is not.
@@ -150,12 +154,27 @@ The first real round is part 3's real run, on ticket 0004. Part 1's real run by 
 
 ## Readiness review
 
-Split on 2026-11-19 from "An agent that builds ready tickets on a timer", after its review round 2. That doc's two review rounds covered this part's design too; their record is in [the runner's ticket](../tickets/0007-agent-runner.md#readiness-review). This part hasn't been reviewed on its own yet, and its Definition of Ready hasn't been checked on its own: that's its next refinement, after part 1.
+Split on 2026-11-19 from "An agent that builds ready tickets on a timer", after its review round 2. That doc's two review rounds covered this part's design too; their record is in [the runner's ticket](../tickets/0007-agent-runner.md#readiness-review). Answered questions from then that apply here (see part 1's record): Q1 (the App, so the runner's comments are told apart by author), Q2 (a round on every commit Qodo reviews), Q4 (a workflow change stops with `needs-help`), Q6 and Q7 (the agent's limits).
 
-Answered questions that apply here (see part 1's record): Q1 (the App, so the runner's comments are told apart by author), Q2 (a round on every commit Qodo reviews), Q4 (a workflow change stops with `needs-help`), Q6 and Q7 (the agent's limits).
+Refined on its own 2026-11-25 by Claude Code (claude-opus-5-5), after part 1 (ticket 0007) and ticket 0008 were built.
+
+- **Goal, restated:** today the runner opens its PR and leaves the review to the user, who fixes or answers each of Qodo's findings by hand. This part makes each run take its open PR one step through review instead: wait for Qodo and CI on the head, then one round where the agent fixes or answers Qodo's findings, the owner's comments, and failed CI, and the runner pushes and replies; up to 4 rounds, then `needs-help`, and `Ready for review by the user.` when nothing is left. The user still merges.
+- **Is it needed:** not built: `scripts/agent-run.sh` has no review code, and an open PR only logs `PR #<n> is open` (looked in the script, `docs/features/`, and `docs/tickets/`). No overlap: the only open PR is #23 (STATUS.md), and "Code reviews by our own agents" is a separate row. Not dropped before (the backlog's history).
+- **Facts settled while refining** (each written into its section):
+  - Qodo reviews in two passes, so the head commit in its comment doesn't mean it's done (PR #22's edit history).
+  - Qodo edits its comments only after a push, never after a comment alone (PR #22: every edit within about 3 minutes of one of its 9 pushes).
+  - Qodo posts inline comments on some PRs (#10: 4, #20: 5, #22: none), each with a review whose body is empty.
+  - CI is check runs only; the commit status API says `pending` with 0 statuses. A check run's id is its Actions job's id, and `gh api …/actions/jobs/<id>/logs` returns the log. The doc's `gh pr checks` and `gh run view` became `gh api`, as part 1 requires.
+  - GitHub doesn't record push times (`pushedDate` is null), so the 60-minute clock now starts at the newest of four times, and a commit the user pushes before removing `needs-help` isn't timed out at once.
+  - Qodo's bot reviews are on: it reviewed the App's PR #22 (part 1's setup task 3).
+- **Definition of Ready:** 1 pass (the summary says the problem, for whom, and what doesn't change). 2 pass (above). 3 pass (an out-of-scope list: the timer, other commenters, merging, our own agents' reviews). 4 pass (one area, the runner: `agent-run.sh`, one prompt, its tests, and two docs; one behavior, the review step; part 1, of a similar size, was built in one session). 5 pass after the facts above: every message, marker, and call is named. 6 pass (none new; Qodo's bot reviews, confirmed on). 7 pass (checks 1 to 6, each in `agent-run.test.sh` with its expected result, failure paths included). 8 pass (rules 1, 2, and 3 addressed). 9 pass (untrusted text, failure modes). 10 pass after Q1.
+- **Questions and answers:**
+  - Q1, when Qodo counts as done → its review comment names the head and hasn't been edited for 10 minutes (2026-11-25).
+  - Q2, a task for the user to keep Qodo reviewing after its trial ends → no: it's a task in `STATUS.md`, not this ticket's.
 
 ## Decisions made for this ticket
 
 - **Retry limit** (2026-11-18): 4 Qodo rounds, then `needs-help`, and the runner waits for the user.
 - **Only Qodo's and the repo owner's comments reach the agent** (2026-11-18), because anyone can comment on a public repo.
+- **Qodo is done only after 10 quiet minutes** (2026-11-25): its review comment must name the head and not have been edited for 10 minutes, since Qodo reviews in two passes (PR #22: the head named after 28 seconds, a new finding 2.5 minutes later). It delays a round by at most 10 minutes, and part 3's timer runs every 15.
 - **One agent round on every commit Qodo reviews** (2026-11-19), even when Qodo finds nothing. Qodo's summary has no fixed "all clear" form, so the agent decides what's open. The cost is one short `claude` run before `Ready for review by the user.`
