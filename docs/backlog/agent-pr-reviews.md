@@ -69,7 +69,7 @@ What doesn't change: Qodo still reviews every PR, as now, until "Ask Qodo once p
 - The clone's `git status --porcelain --ignored` was the same after.
 - `bash -c 'exec /bin/true "$(head -c 200000 /dev/zero | tr "\0" a)"'`: "Argument list too long", exit 126; 100,000 characters: exit 0.
 
-**The fixture,** `scripts/test/fixtures/agent-review/sum.sh` (new, used by check 8), exactly:
+**The fixture,** `scripts/test/fixtures/agent-review/sum.fixture` (new, used by check 8; not named `.sh`, so the planned ShellCheck check, which lints every `.sh` under `scripts/`, doesn't fail on its deliberate bugs), exactly:
 
 ```sh
 #!/bin/sh
@@ -126,6 +126,7 @@ None. The CLIs and their logins are already set up (they review every refinement
 
 - `scripts/agent-review.sh` (new): the steps above.
 - `scripts/agent-review/opencode.md` (new): opencode's review instructions.
+- `scripts/test/fixtures/agent-review/sum.fixture` (new): check 8's fixture.
 - `scripts/test/agent-review.test.sh` (new): checks 1 to 7, with stub `codex`, `claude`, and `opencode` first on `PATH`, each recording its arguments, its working folder, and its environment, and answering from fixture files; run by `npm run test:scripts`.
 - `package.json`: `test:scripts` runs the new test.
 - `.agents/skills/next-ticket/SKILL.md`: the new step. `.agents/skills/next-ticket/reviewers.md` (new): the results table, with its columns explained.
