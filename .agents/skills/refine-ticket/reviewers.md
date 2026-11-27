@@ -49,3 +49,5 @@ One row per reviewer per round. **Kept** findings were fixed in the doc or turne
 | 2026-11-24 | Mark a blocked ticket `ready` before its blockers are built | 1 | opencode | ollama-cloud/deepseek-v4-pro | 3 | 1 | 0 |
 | 2026-11-24 | Mark a blocked ticket `ready` before its blockers are built | 2 | Codex | gpt-6.1-sol | 0 | 0 | 0 |
 | 2026-11-24 | Mark a blocked ticket `ready` before its blockers are built | 2 | opencode | ollama-cloud/deepseek-v4-pro | 0 | 0 | 0 |
+| 2026-11-26 | Agent reviews of a PR on our subscriptions | 1 | Codex | gpt-6.2-sol | 12 | 1 | 0 |
+| 2026-11-26 | Agent reviews of a PR on our subscriptions | 1 | opencode | ollama-cloud/glm-5.3 | 15 | 1 | 0 |
