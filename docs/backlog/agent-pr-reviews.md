@@ -50,7 +50,7 @@ What doesn't change: Qodo still reviews every PR, as now, until "Ask Qodo once p
    | Name | Command | What keeps it read-only |
    |---|---|---|
    | `codex` | `codex review -c sandbox_mode='"read-only"' -c approval_policy='"never"' --base <base>` | Codex's OS sandbox, read-only, and no approvals to leave it |
-   | `claude` | `claude -p "/code-review medium <base>...<head>" --permission-mode plan --strict-mcp-config` | Claude Code's plan mode, no MCP servers, and `/code-review` without `--fix`, which "ask[s] Claude for a report only" ([local code review](https://code.claude.com/docs/en/code-review-local)) |
+   | `claude` | `claude -p "/code-review high <base>...<head>" --permission-mode plan --strict-mcp-config` | Claude Code's plan mode, no MCP servers, and `/code-review` without `--fix`, which "ask[s] Claude for a report only" ([local code review](https://code.claude.com/docs/en/code-review-local)) |
    | `opencode-<model>` | `opencode run --standalone --agent plan -m <provider/model> -f <run>/diff.patch "$(cat scripts/agent-review/opencode.md)"` | `opencode.json` from `main`: the `plan` agent may only `read`, `grep`, `glob`, and `list` |
 
    Claude Code keeps its shell: with `--tools Read,Grep,Glob`, as `refine-ticket` runs it on design docs, it couldn't run `git diff`, and said it reviewed a guess (probed below). Its plan mode is Claude Code's own rule, not the OS's, so step 9 checks for writes.
@@ -64,7 +64,7 @@ What doesn't change: Qodo still reviews every PR, as now, until "Ask Qodo once p
 
 **Probed 2026-11-26,** on a scratch clone with no remote and one commit on top of `main` adding the fixture below, `scripts/sum.sh`, with four bugs (line 7's `[ $total > 100 ]` redirects instead of comparing; line 4's `$(cat $1)` is unquoted; octal parsing of `08`; no error on a missing file), all three at once:
 - `codex review` as in the table, with `--base` a sha: 48 seconds, exit 0, four findings marked `[P1]` to `[P3]` with `file:line`, the report on stdout and again on stderr after a header with `model: gpt-6.2-sol` and `sandbox: read-only`.
-- `claude -p "/code-review medium <sha>...HEAD" --permission-mode plan --strict-mcp-config`: 34 seconds, exit 0, six findings, as text then a JSON list (`file`, `line`, `summary`, `failure_scenario`, `severity`). With both ends as shas, `<base sha>...<head sha>` as in the table: 41 seconds, exit 0, seven findings, the first at `"line": 7`. The same with `--tools Read,Grep,Glob`: 36 seconds, but it wrote "I had no shell, so I couldn't run `git diff`".
+- `claude -p "/code-review medium <sha>...HEAD" --permission-mode plan --strict-mcp-config`: 34 seconds, exit 0, six findings, as text then a JSON list (`file`, `line`, `summary`, `failure_scenario`, `severity`). With both ends as shas, `<base sha>...<head sha>` as in the table: 41 seconds, exit 0, seven findings, the first at `"line": 7`. The same with `--tools Read,Grep,Glob`: 36 seconds, but it wrote "I had no shell, so I couldn't run `git diff`". Again on 2026-11-27 with `high`, as in the table: 35 seconds, exit 0, six findings, the first at `"line": 7`, and the clone's status the same after.
 - `opencode run --standalone --agent plan -m ollama-cloud/<model> -f diff.patch "<instructions>"`, the three models at once: 12, 23, and 33 seconds, all exit 0, each with 2 to 6 findings, the `>` bug in all three.
 - The clone's `git status --porcelain --ignored` was the same after.
 - `bash -c 'exec /bin/true "$(head -c 200000 /dev/zero | tr "\0" a)"'`: "Argument list too long", exit 126; 100,000 characters: exit 0.
@@ -142,7 +142,7 @@ The CLIs and their logins are already set up (they review every refinement).
 
 Checks 1 to 8 are in `scripts/test/agent-review.test.sh`, on a scratch repo with a local bare `origin`, and pass when it prints `ok N`. Check 9 is a real run, and check 10 is `npm run check` and CI.
 
-1. **Five reviewers, same pinned diff:** with one commit on a branch, a run calls the `codex` stub once with `review`, `sandbox_mode="read-only"`, `approval_policy="never"`, and `--base` the merge base's sha; the `claude` stub once with `-p`, `/code-review medium <base>...<head>`, `--permission-mode plan`, and `--strict-mcp-config`; and the `opencode` stub three times, once per model in `reviewers.md`'s list, each with `--agent plan`, `-m` the model, and `-f` a file holding exactly `git diff <base> <head>`. Each is called from the clone, with the clone's `HEAD` at the pinned head, and with no `GH_TOKEN` or `GITHUB_TOKEN` in its environment. With a commit made on the branch while the stubs run, the summary still names the first head, and says the checkout moved, and the run exits 6; the same with the commit made while the `opencode debug agents` stub runs, before any reviewer. With `origin/main` ahead of the branch at the start, the clone's `opencode.json` is `origin/main`'s. With `--base nosuchref`, it exits 7 and calls no reviewer; the same with `XDG_STATE_HOME` pointing at a file, so the run folder can't be made. With the branch reset to its parent between the pin and the clone (a stub `git clone` wrapper doing it), it exits 6 with the "is gone" message and no run folder left. With a commit during the run that also `git add -f`s a file that was ignored, it exits 6, not 4. With `origin/main` moved after the start, the base and `opencode.json` are still the first ones.
+1. **Five reviewers, same pinned diff:** with one commit on a branch, a run calls the `codex` stub once with `review`, `sandbox_mode="read-only"`, `approval_policy="never"`, and `--base` the merge base's sha; the `claude` stub once with `-p`, `/code-review high <base>...<head>`, `--permission-mode plan`, and `--strict-mcp-config`; and the `opencode` stub three times, once per model in `reviewers.md`'s list, each with `--agent plan`, `-m` the model, and `-f` a file holding exactly `git diff <base> <head>`. Each is called from the clone, with the clone's `HEAD` at the pinned head, and with no `GH_TOKEN` or `GITHUB_TOKEN` in its environment. With a commit made on the branch while the stubs run, the summary still names the first head, and says the checkout moved, and the run exits 6; the same with the commit made while the `opencode debug agents` stub runs, before any reviewer. With `origin/main` ahead of the branch at the start, the clone's `opencode.json` is `origin/main`'s. With `--base nosuchref`, it exits 7 and calls no reviewer; the same with `XDG_STATE_HOME` pointing at a file, so the run folder can't be made. With the branch reset to its parent between the pin and the clone (a stub `git clone` wrapper doing it), it exits 6 with the "is gone" message and no run folder left. With a commit during the run that also `git add -f`s a file that was ignored, it exits 6, not 4. With `origin/main` moved after the start, the base and `opencode.json` are still the first ones.
 2. **The clone:** has no remote, and no file the checkout's `.gitignore` ignores (a scratch `server/.env` in the checkout isn't in it). With the branch's `opencode-reviewer.json` changed to allow `bash`, the clone's `opencode.json` is still `main`'s. With a `main` whose copy allows `bash` (the `opencode debug agents` stub showing it), the run exits 5 and calls no reviewer.
 3. **The base:** with `main` on `origin` one commit ahead of the branch's base, the diff holds only the branch's commit.
 4. **A clean run isn't a write:** with the branch tracking an `opencode.json` identical to `main`'s policy (so step 4 replaces it with the same bytes), and stubs that only read, it exits 0.
@@ -155,15 +155,15 @@ Checks 1 to 8 are in `scripts/test/agent-review.test.sh`, on a scratch repo with
 
 ## Readiness review
 
-Refined 2026-11-26 by Claude Code (claude-opus-5-5), while the user was away: the decisions below wait for the user.
+Refined 2026-11-26 by Claude Code (claude-opus-5-5), while the user was away. The user answered Q1 to Q5 on 2026-11-27 (see the decisions).
 
 - **Goal, restated:** before asking Qodo, have the three flat-rate agent CLIs review a PR's diff (opencode with all three of its models), read-only, and check their findings; track per reviewer what holds up, to learn which earn their place.
 - **Is it needed:** not built: no review script in `scripts/`, and `next-ticket` has no review step before the PR (its "Take it through review" step is Qodo's). It replaces the row "Code reviews by our own agents" (PR #25). It overlaps "Ask Qodo once per PR", which is blocked by it and changes only when Qodo reviews. Not dropped before.
 - **Facts settled:** the probes above.
-- **Definition of Ready:** 1 pass. 2 pass. 3 pass. 4 pass (one script, its test, one skill step, two docs). 5 pass after round 1. 6 pass (none). 7 pass after round 1. 8 pass (rule 3). 9 pass after round 1. 10 fails until Q1 to Q5 are answered.
+- **Definition of Ready:** 1 pass. 2 pass. 3 pass. 4 pass (one script, its test, one skill step, two docs). 5 pass after round 1. 6 pass (none). 7 pass after round 1. 8 pass (rule 3). 9 pass after round 1. 10 pass: Q1 to Q5 answered on 2026-11-27.
 - **Questions for the user** (recommended answers; "yes" accepts):
   - Q1, where the review step lives → a script plus a step in `next-ticket`, with the results table beside that skill, not a new skill.
-  - Q2, Claude Code's effort → `medium` (at `low` the first probe reported only the two most serious of four bugs; at `medium`, six findings).
+  - Q2, Claude Code's effort → `medium` (at `low` the first probe reported only the two most serious of four bugs; at `medium`, six findings). The user chose `high` instead (see the decisions).
   - Q3, when it runs → once, before the PR opens.
   - Q4, all five every time → yes, until the table shows one adds nothing.
   - Q5, if no reviewer finishes twice → open the PR anyway and say so: the reviewers help, but don't gate the PR.
@@ -234,4 +234,8 @@ Refined 2026-11-26 by Claude Code (claude-opus-5-5), while the user was away: th
 
 - **opencode reviews with every candidate model** (2026-11-26, the user's idea): its models are cheap, and running them on the same diff makes the comparison fair, unlike `refine-ticket`'s rotation of one model per refinement.
 
-Q1 to Q5 wait for the user.
+- **A script plus a step in `next-ticket`** (Q1, 2026-11-27): `scripts/agent-review.sh` and a step in that skill, with the results table beside it, not a new skill.
+- **Claude Code reviews at `high` effort** (Q2, 2026-11-27, the user's choice over the recommended `medium`): `/code-review high`. Probed the same day on the fixture: 35 seconds, well inside the 15-minute limit. The results table shows whether it finds what the others miss.
+- **Once per PR, before it opens** (Q3, 2026-11-27).
+- **All five reviewers every time** (Q4, 2026-11-27), until the table shows one adds nothing.
+- **If no reviewer finishes twice, the PR opens anyway** (Q5, 2026-11-27), and its description says so: the reviewers help, but don't gate the PR.
