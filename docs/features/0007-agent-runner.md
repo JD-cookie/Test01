@@ -27,7 +27,7 @@ What doesn't change:
 - Marking tickets `ready`, refining them, or merging PRs.
 - More than one ticket at a time, or more than one runner per machine. Runners on two machines don't collide, since each works only on its own claims (`runner-<machine id>`), but only one machine is meant to run it.
 - Running in GitHub Actions or the cloud (the reasons are in the ticket, linked in "Changes").
-- Reviews by our own agents. That's its own backlog item: "Code reviews by our own agents".
+- Reviews by our own agents. That's its own backlog item: "Agent reviews of a PR on our subscriptions" (it replaced "Code reviews by our own agents" on 2026-11-26).
 - Notifying the user outside GitHub. The runner is its own GitHub identity, so GitHub notifies the user of its PRs and comments as for anyone's.
 
 ## Concepts
