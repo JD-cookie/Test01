@@ -35,7 +35,7 @@ What doesn't change: Qodo still reviews every PR, as now, until "Ask Qodo once p
 
 `scripts/agent-review.sh [--base <ref>]`, run from the repo root of a branch's checkout. `<ref>` defaults to `origin/main`.
 
-1. **Pin what's reviewed.** It reads, once, at the start: `head=$(git rev-parse HEAD)`, `ref=$(git rev-parse <ref>^{commit})`, `main=$(git rev-parse origin/main^{commit})`, and then `base=$(git merge-base $ref $head)`, from those shas only. It uses only these from then on, so a commit or a fetch while it runs doesn't change what's reviewed. If any of them fails (a `--base` that doesn't resolve, no `origin/main`, or no merge base), it prints which and exits 7, and no reviewer runs. The merge base, not `<ref>` itself, so a `main` that moved on doesn't show up as changes.
+1. **Pin what's reviewed.** It reads, once, at the start: `head=$(git rev-parse HEAD)`, `ref=$(git rev-parse <ref>^{commit})`, `main=$(git rev-parse origin/main^{commit})`, and then `base=$(git merge-base $ref $head)`, from those shas only. It uses only these from then on, so a commit or a fetch while it runs doesn't change what's reviewed. If any of them fails (a `--base` that doesn't resolve, no `origin/main`, or no merge base), it prints which and exits 7, and no reviewer runs. Exit 7 covers every setup step that fails before a reviewer starts: the run folder can't be made, the clone or its checkout of `<head>` fails, or the policy can't be read from `$main`. The run folder is removed then, if it was made. One exception: if the clone can't check out `<head>` because the branch was reset or amended after the pin (the commit is no longer in the checkout's refs), that's the checkout moving, exit 6. The merge base, not `<ref>` itself, so a `main` that moved on doesn't show up as changes.
    - **Uncommitted changes** are refused: if `git status --porcelain` lists anything, untracked files included (ignored ones aren't listed), it prints `agent-review: commit first: the reviewers see only commits` and exits 2, and no reviewer runs.
    - **Nothing to review:** if `base` equals `head`, it prints `agent-review: nothing to review` and exits 3.
 2. **The run folder:** `${XDG_STATE_HOME:-$HOME/.local/state}/agent-review/<UTC time>-<pid>/`, made with `mkdir` (not `mkdir -p` for the last part), so two runs at once can't share one, as the runner names its run folders (`scripts/agent-run.sh`).
@@ -44,7 +44,7 @@ What doesn't change: Qodo still reviews every PR, as now, until "Ask Qodo once p
    - The rules are anything else: it exits 5 before any reviewer runs.
    - `opencode` is missing, or the check fails or times out: the three opencode reviewers are `failed` ("opencode's policy couldn't be checked") and aren't started; Codex and Claude Code run as usual.
 5. **The diff for opencode:** `git -C <run>/repo diff <base> <head> > <run>/diff.patch`, outside the clone. opencode's `plan` agent has no shell, so it gets the diff as an attached file (`opencode run -f`). Not as part of the prompt: one command-line argument is limited to 128 KiB on Linux, and a 200,000-character argument fails with "Argument list too long" (probed below).
-6. **Before:** it touches `<run>/started`, and records `git status --porcelain --ignored` of both the clone and the checkout.
+6. **Before:** it records `git --no-optional-locks status --porcelain --ignored` of both the clone and the checkout, and then touches `<run>/started`. Every `git status` the script runs has `--no-optional-locks`, so its own status calls don't rewrite `.git/index` and look like a reviewer's write.
 7. **The reviewers,** all at once, from inside the clone, each with a time limit (`timeout --kill-after=1m "$AGENT_REVIEW_TIME"`, 15 minutes by default; `AGENT_REVIEW_TIME` is for the tests), each writing `<run>/<name>.out` and `<run>/<name>.err`:
 
    | Name | Command | What keeps it read-only |
@@ -56,11 +56,11 @@ What doesn't change: Qodo still reviews every PR, as now, until "Ask Qodo once p
    Claude Code keeps its shell: with `--tools Read,Grep,Glob`, as `refine-ticket` runs it on design docs, it couldn't run `git diff`, and said it reviewed a guess (probed below). Its plan mode is Claude Code's own rule, not the OS's, so step 9 checks for writes.
 8. **The summary:** when all are done, `<run>/summary.md` lists per reviewer: its name, its model (`codex`: the `model:` line its header prints on stderr; `opencode-*`: the model passed; `claude`: `default`), its status (`finished`, `failed (exit N)`, or `timed out`), the time taken, and its report's path; then the base and head shas. The script prints it and the run folder's path.
 9. **After:**
-   - **The clone:** any file in `<run>/repo`, its `.git` included, that's newer than `<run>/started` (`find <run>/repo -newer <run>/started -type f`, `opencode.json` aside) is a write: an edited ignored file or `.git/config` too, not only a new one. So is any change in the clone's `git status --porcelain --ignored`, which also shows a deleted file. It prints them, and exits 4: a reviewer wrote something.
+   - **The clone:** any file in `<run>/repo`, its `.git` included, that's newer than `<run>/started` (`find <run>/repo -newer <run>/started -type f`, `.git/index` aside, since a reviewer's own `git status` may refresh it; a staged change still shows in the status compared next) is a write: an edited ignored file or `.git/config` too, not only a new one. So is any change in the clone's status, which also shows a deleted file, and any difference between the clone's `opencode.json` and the policy written in step 4 (`cmp`): opencode loads it when it starts, and a reviewer that edited it would have changed what a later process read. It prints them, and exits 4: a reviewer wrote something.
    - **The checkout:** if its `git status --porcelain --ignored` differs, it prints the difference and exits 4 too. If its `HEAD` isn't the pinned `<head>` anymore (a commit while the run went on, at any step, by the user or the calling agent), that's not a write: the summary says `the checkout moved during the run: the review is of <head>, and HEAD is now <new>`, and it exits 6.
 10. **Cleanup:** it deletes `<run>/repo`, keeping the reports, the diff, and the summary.
 
-**Exit status:** 0 if at least one reviewer finished and nothing was written; 1 if none finished; 2 uncommitted changes; 3 nothing to review; 4 a reviewer wrote something; 5 opencode's permissions aren't read-only; 6 the checkout's head moved during the run; 7 the shas couldn't be pinned. Exit 4 wins over 6, and both over 0 and 1.
+**Exit status:** 0 if at least one reviewer finished and nothing was written; 1 if none finished; 2 uncommitted changes; 3 nothing to review; 4 a reviewer wrote something; 5 opencode's permissions aren't read-only; 6 the checkout's head moved during the run; 7 the setup failed before any reviewer started. Exit 4 wins over 6, and both over 0 and 1.
 
 **Probed 2026-11-26,** on a scratch clone with no remote and one commit on top of `main` adding the fixture below, `scripts/sum.sh`, with four bugs (line 7's `[ $total > 100 ]` redirects instead of comparing; line 4's `$(cat $1)` is unquoted; octal parsing of `08`; no error on a missing file), all three at once:
 - `codex review` as in the table, with `--base` a sha: 48 seconds, exit 0, four findings marked `[P1]` to `[P3]` with `file:line`, the report on stdout and again on stderr after a header with `model: gpt-6.2-sol` and `sandbox: read-only`.
@@ -69,7 +69,7 @@ What doesn't change: Qodo still reviews every PR, as now, until "Ask Qodo once p
 - The clone's `git status --porcelain --ignored` was the same after.
 - `bash -c 'exec /bin/true "$(head -c 200000 /dev/zero | tr "\0" a)"'`: "Argument list too long", exit 126; 100,000 characters: exit 0.
 
-**The fixture,** `scripts/test/fixtures/agent-review/sum.fixture` (new, used by check 8; not named `.sh`, so the planned ShellCheck check, which lints every `.sh` under `scripts/`, doesn't fail on its deliberate bugs), exactly:
+**The fixture,** `scripts/test/fixtures/agent-review/sum.fixture` (new, used by check 9; not named `.sh`, so the planned ShellCheck check, which lints every `.sh` under `scripts/`, doesn't fail on its deliberate bugs), exactly:
 
 ```sh
 #!/bin/sh
@@ -96,14 +96,14 @@ Then it adds one row per reviewer to the results table in **`.agents/skills/next
 
 ### In `next-ticket`
 
-A new last part of its step 2, "Build it", so the step numbers the runner and its spec cite ("`next-ticket` step 3", in `scripts/agent-run.sh`, `scripts/agent-run/build.md`, and `docs/features/0007-agent-runner.md`) stay right: **Review it with our agents.** After `npm run check` passes and the work is committed, run `scripts/agent-review.sh`:
-- **Exit 0:** check the findings, fix the kept ones in new commits (and run `npm run check` again), record the rows, and say in the PR's body what the run found and what was done, naming any reviewer that didn't finish.
+A new first part of its step 3, "Open the PR", before the PR is opened: **Review it with our agents.** Step 3, not step 2, because the runner's agent follows step 2 ("step 2 only", `scripts/agent-run/build.md`) and can't run the script (its Claude settings allow no `sh` or `scripts/*` command), while the runner does step 3 itself. So the runner skips the review until ticket 0009 adds it. Adding a part to step 3 leaves the step numbers the runner and its spec cite ("`next-ticket` step 3") right. After `npm run check` passes and the work is committed, run `scripts/agent-review.sh`:
+- **Exit 0:** check the findings, fix the kept ones in new commits (and run `npm run check` again), and say in the PR's body what the run found and what was done, naming any reviewer that didn't finish.
 - **Exit 1** (no reviewer finished): run it once more. If it fails again, open the PR anyway, and say so in its body: the reviewers are a help, not a gate.
 - **Exit 2:** commit, then run it again. **Exit 3:** nothing to review; go on.
-- **Exit 4, 5, or 7:** stop and tell the user, with the script's output: a reviewer wrote something, opencode wasn't read-only, or the shas couldn't be pinned.
+- **Exit 4, 5, or 7:** stop and tell the user, with the script's output: a reviewer wrote something, opencode wasn't read-only, or the setup failed.
 - **Exit 6:** the reviewed head is older than the branch now. Run it again, once the branch is still, so the PR's head is the one reviewed.
 
-One run per PR, before it opens.
+One run per PR, before it opens. The rows go into the table once, after the last attempt, from the summaries the agent kept: one commit, before the PR opens. Writing them between attempts would leave an uncommitted change, which the next attempt refuses (exit 2).
 
 ## Security and configuration
 
@@ -129,8 +129,8 @@ None. The CLIs and their logins are already set up (they review every refinement
 
 - `scripts/agent-review.sh` (new): the steps above.
 - `scripts/agent-review/opencode.md` (new): opencode's review instructions.
-- `scripts/test/fixtures/agent-review/sum.fixture` (new): check 8's fixture.
-- `scripts/test/agent-review.test.sh` (new): checks 1 to 7, with stub `codex`, `claude`, and `opencode` first on `PATH`, each recording its arguments, its working folder, and its environment, and answering from fixture files; run by `npm run test:scripts`.
+- `scripts/test/fixtures/agent-review/sum.fixture` (new): check 9's fixture.
+- `scripts/test/agent-review.test.sh` (new): checks 1 to 8, with stub `codex`, `claude`, and `opencode` first on `PATH`, each recording its arguments, its working folder, and its environment, and answering from fixture files; run by `npm run test:scripts`.
 - `package.json`: `test:scripts` runs the new test.
 - `.agents/skills/next-ticket/SKILL.md`: the new step. `.agents/skills/next-ticket/reviewers.md` (new): the results table, with its columns explained.
 - `docs/features/NNNN-agent-pr-reviews.md` (new spec doc), with a row in the Features table of `docs/README.md` and a line in that file's Changes, as for the ticket system and the runner.
@@ -138,17 +138,18 @@ None. The CLIs and their logins are already set up (they review every refinement
 
 ## Acceptance checks
 
-Checks 1 to 7 are in `scripts/test/agent-review.test.sh`, on a scratch repo with a local bare `origin`, and pass when it prints `ok N`. Check 8 is a real run, and check 9 is `npm run check` and CI.
+Checks 1 to 8 are in `scripts/test/agent-review.test.sh`, on a scratch repo with a local bare `origin`, and pass when it prints `ok N`. Check 9 is a real run, and check 10 is `npm run check` and CI.
 
-1. **Five reviewers, same pinned diff:** with one commit on a branch, a run calls the `codex` stub once with `review`, `sandbox_mode="read-only"`, `approval_policy="never"`, and `--base` the merge base's sha; the `claude` stub once with `-p`, `/code-review medium <base>...<head>`, `--permission-mode plan`, and `--strict-mcp-config`; and the `opencode` stub three times, once per model in `reviewers.md`'s list, each with `--agent plan`, `-m` the model, and `-f` a file holding exactly `git diff <base> <head>`. Each is called from the clone, with the clone's `HEAD` at the pinned head, and with no `GH_TOKEN` or `GITHUB_TOKEN` in its environment. With a commit made on the branch while the stubs run, the summary still names the first head, and says the checkout moved, and the run exits 6; the same with the commit made while the `opencode debug agents` stub runs, before any reviewer. With `origin/main` ahead of the branch at the start, the clone's `opencode.json` is `origin/main`'s. With `--base nosuchref`, it exits 7 and calls no reviewer. With `origin/main` moved after the start, the base and `opencode.json` are still the first ones.
+1. **Five reviewers, same pinned diff:** with one commit on a branch, a run calls the `codex` stub once with `review`, `sandbox_mode="read-only"`, `approval_policy="never"`, and `--base` the merge base's sha; the `claude` stub once with `-p`, `/code-review medium <base>...<head>`, `--permission-mode plan`, and `--strict-mcp-config`; and the `opencode` stub three times, once per model in `reviewers.md`'s list, each with `--agent plan`, `-m` the model, and `-f` a file holding exactly `git diff <base> <head>`. Each is called from the clone, with the clone's `HEAD` at the pinned head, and with no `GH_TOKEN` or `GITHUB_TOKEN` in its environment. With a commit made on the branch while the stubs run, the summary still names the first head, and says the checkout moved, and the run exits 6; the same with the commit made while the `opencode debug agents` stub runs, before any reviewer. With `origin/main` ahead of the branch at the start, the clone's `opencode.json` is `origin/main`'s. With `--base nosuchref`, it exits 7 and calls no reviewer; the same with `XDG_STATE_HOME` pointing at a file, so the run folder can't be made. With the branch reset to its parent between the pin and the clone (a stub `git clone` wrapper doing it), it exits 6. With `origin/main` moved after the start, the base and `opencode.json` are still the first ones.
 2. **The clone:** has no remote, and no file the checkout's `.gitignore` ignores (a scratch `server/.env` in the checkout isn't in it). With the branch's `opencode-reviewer.json` changed to allow `bash`, the clone's `opencode.json` is still `main`'s. With a `main` whose copy allows `bash` (the `opencode debug agents` stub showing it), the run exits 5 and calls no reviewer.
 3. **The base:** with `main` on `origin` one commit ahead of the branch's base, the diff holds only the branch's commit.
-4. **Refusals:** with a changed tracked file, and again with only an untracked file, it exits 2 and calls no reviewer; with only an ignored file, it runs. With no commits since the base, it exits 3.
-5. **Failures:** with `AGENT_REVIEW_TIME=2s`, the `codex` stub exiting 1, and the `claude` stub sleeping 10 seconds, the run finishes, the summary lists `codex` as `failed (exit 1)` and `claude` as `timed out`, and the three opencode reports are there; it exits 0. With every stub exiting 1, it exits 1.
-6. **Writes are caught:** with the `opencode` stub writing a new ignored file in the clone, the run exits 4 and names it. The same with the `codex` stub making a commit in the clone, with it appending to the clone's `.git/config`, with a stub editing a file the clone already had as ignored, with a stub deleting a tracked file in the clone, and with the `claude` stub writing a new file in the checkout. With the branch tracking an `opencode.json` that's a symlink to a file outside the clone, that file is unchanged, and the clone's `opencode.json` is `main`'s. With no `opencode` on `PATH`, the three opencode reviewers are `failed` and Codex and Claude Code still run.
-7. **Two runs at once** get two run folders; the clone is gone after each run, and the reports, `diff.patch`, and `summary.md` are kept.
-8. **A real run,** on the PR that builds this ticket, besides the branch's own run of the new `next-ticket` step: in a scratch clone of `main` with one commit adding the fixture as `scripts/sum.sh`, the ticket's script is run from there (`sh <the ticket's checkout>/scripts/agent-review.sh`, so its prompt comes from beside it, and `main`'s `opencode-reviewer.json` from the fixture clone). It exits 0, the summary lists all five as `finished`, and each report names line 7 of `scripts/sum.sh` in its own form (`sum.sh:7` for Codex and opencode, `"line": 7` for Claude Code). The PR's body shows that summary, and the matching line from each report. The fixture run's findings aren't fixed or recorded in the table: they're about the fixture.
-9. `npm run check` passes locally, and every CI job on the PR is green.
+4. **A clean run isn't a write:** with the branch tracking an `opencode.json` identical to `main`'s policy (so step 4 replaces it with the same bytes), and stubs that only read, it exits 0.
+5. **Refusals:** with a changed tracked file, and again with only an untracked file, it exits 2 and calls no reviewer; with only an ignored file, it runs. With no commits since the base, it exits 3.
+6. **Failures:** with `AGENT_REVIEW_TIME=2s`, the `codex` stub exiting 1, and the `claude` stub sleeping 10 seconds, the run finishes, the summary lists `codex` as `failed (exit 1)` and `claude` as `timed out`, and the three opencode reports are there; it exits 0. With every stub exiting 1, it exits 1.
+7. **Writes are caught:** with the `opencode` stub writing a new ignored file in the clone, the run exits 4 and names it. The same with the `codex` stub making a commit in the clone, with it appending to the clone's `.git/config`, with a stub editing a file the clone already had as ignored, with a stub deleting a tracked file in the clone, with a stub editing the clone's `opencode.json`, and with the `claude` stub writing a new file in the checkout. With the branch tracking an `opencode.json` that's a symlink to a file outside the clone, that file is unchanged, and the clone's `opencode.json` is `main`'s. With no `opencode` on `PATH`, the three opencode reviewers are `failed` and Codex and Claude Code still run.
+8. **Two runs at once** get two run folders; the clone is gone after each run, and the reports, `diff.patch`, and `summary.md` are kept.
+9. **A real run,** on the PR that builds this ticket, besides the branch's own run of the new `next-ticket` step: in a scratch clone of `main` with one commit adding the fixture as `scripts/sum.sh`, the ticket's script is run from there (`sh <the ticket's checkout>/scripts/agent-review.sh`, so its prompt comes from beside it, and `main`'s `opencode-reviewer.json` from the fixture clone). It exits 0, the summary lists all five as `finished`, and each report names line 7 of `scripts/sum.sh` in its own form (`sum.sh:7` for Codex and opencode, `"line": 7` for Claude Code). The PR's body shows that summary, and the matching line from each report. The fixture run's findings aren't fixed or recorded in the table: they're about the fixture.
+10. `npm run check` passes locally, and every CI job on the PR is green.
 
 ## Readiness review
 
@@ -209,6 +210,14 @@ Refined 2026-11-26 by Claude Code (claude-opus-5-5), while the user was away: th
   - opencode 1 (blocking, needs a run): `git show $main:` in the clone fails when `origin/main` is ahead, since a clone doesn't copy remote branches. Done: fixed, it runs in the checkout (check 1); the probe it suggests isn't needed once it does.
   - opencode 3 (blocking): a new numbered step would break the runner's "`next-ticket` step 3" references (`scripts/agent-run.sh:412`, `scripts/agent-run/build.md:5,16`, `docs/features/0007-agent-runner.md:84,102`). Done: fixed, it's the last part of step 2.
   - opencode 4 (blocking): the reviewers read the branch's own `AGENTS.md` and `CLAUDE.md`. Done: answered, a known gap, and "written by the agent or the user" corrected.
+  - Dropped: 0.
+- **Review round 4:** Codex (gpt-6.2-sol) and opencode (ollama-cloud/glm-5.3), blocking findings only.
+  - Codex 1 and opencode 1 (blocking): as part of `next-ticket` step 2, the review would reach the runner's agent, which follows step 2 and can't run the script (`scripts/agent-run/build.md:5`, `scripts/agent-run/settings.json`). Done: fixed, it's the first part of step 3, which the runner does itself.
+  - Codex 2 (blocking): `opencode.json` was exempt from the write check. Done: fixed, it's compared with the policy written (check 7).
+  - Codex 3 and opencode 2 (blocking, needs a run): the script's own `git status` can rewrite `.git/index` after the start marker. Done: fixed without the probe: `--no-optional-locks` on every status, the statuses recorded before the marker, and `.git/index` left out of the file check (check 4).
+  - Codex 4 (blocking): other setup failures had no exit. Done: fixed, exit 7 covers them (check 1).
+  - Codex 5 (blocking, needs a run): a branch reset between the pin and the clone loses the head. Done: fixed, that's exit 6 (check 1).
+  - Codex 6 (blocking): rows written between attempts would block the retry. Done: fixed, written once after the last attempt.
   - Dropped: 0.
 
 ## Decisions made for this ticket
