@@ -1,6 +1,6 @@
 # Agent reviews of a PR on our subscriptions
 
-Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNNN-agent-pr-reviews.md`. In the PR that builds it, it moves to `docs/tickets/` (ticket 0006's layout), and that PR adds its spec doc, `docs/features/NNNN-agent-pr-reviews.md`.
+Status: ready (2026-11-27), as ticket 0010. In the PR that builds it, it moves to `docs/tickets/` (ticket 0006's layout), and that PR adds its spec doc, `docs/features/0010-agent-pr-reviews.md`.
 
 From [the research on cheaper reviews](review-tools-research.md). It replaced "Code reviews by our own agents". "Ask Qodo once per PR" is blocked by it.
 
@@ -123,7 +123,7 @@ One run per PR, before it opens. The rows go into the table once, after the last
 
 ## Tasks for the user
 
-1. **Don't run the runner** (`scripts/agent-run.sh`) from the ready PR's merge until the building session has claimed this ticket by name (`scripts/ticket.sh claim NNNN-agent-pr-reviews <agent>`): the runner would claim it as the first free `ready` ticket, and it can't do check 9's real runs, which need this ticket's own step. The builder checks that the claim is the session's: after `git fetch`, `git log -1 --format=%B origin/NNNN-agent-pr-reviews` ends with `Claimed-By: <the session's agent name>`.
+1. **Don't run the runner** (`scripts/agent-run.sh`) from the ready PR's merge until the building session has claimed this ticket by name (`scripts/ticket.sh claim 0010-agent-pr-reviews <agent>`): the runner would claim it as the first free `ready` ticket, and it can't do check 9's real runs, which need this ticket's own step. The builder checks that the claim is the session's: after `git fetch`, `git log -1 --format=%B origin/NNNN-agent-pr-reviews` ends with `Claimed-By: <the session's agent name>`.
 
 The CLIs and their logins are already set up (they review every refinement).
 
@@ -135,7 +135,7 @@ The CLIs and their logins are already set up (they review every refinement).
 - `scripts/test/agent-review.test.sh` (new): checks 1 to 8, with stub `codex`, `claude`, and `opencode` first on `PATH`, each recording its arguments, its working folder, and its environment, and answering from fixture files; run by `npm run test:scripts`.
 - `package.json`: `test:scripts` runs the new test.
 - `.agents/skills/next-ticket/SKILL.md`: the new step. `.agents/skills/next-ticket/reviewers.md` (new): the results table, with its columns explained.
-- `docs/features/NNNN-agent-pr-reviews.md` (new spec doc), with a row in the Features table of `docs/README.md` and a line in that file's Changes, as for the ticket system and the runner.
+- `docs/features/0010-agent-pr-reviews.md` (new spec doc), with a row in the Features table of `docs/README.md` and a line in that file's Changes, as for the ticket system and the runner.
 - `docs/devops.md`: a short section on running the script, beside "The runner", linking the spec doc, with a Changes line.
 
 ## Acceptance checks
@@ -229,6 +229,7 @@ Refined 2026-11-26 by Claude Code (claude-opus-5-5), while the user was away. Th
   - Codex 4 (blocking): the opencode policy check ran before the baseline. Done: fixed, the baseline comes first (check 7).
   - Codex 5 (blocking): the runner would claim this ticket, and can't do check 9. Evidence: `scripts/agent-run.sh:641,701`. Done: fixed, a task for the user, as for ShellCheck.
   - Dropped: 0.
+- **Approved by the user:** 2026-11-27
 
 ## Decisions made for this ticket
 

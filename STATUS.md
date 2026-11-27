@@ -1,6 +1,6 @@
 # Project status
 
-Last updated 2026-11-26. This is a handoff note between working sessions. The system spec is in `docs/`; this file tracks where the work stands. Keep one fact or next step per line, so updates change a line rather than rewrite a paragraph.
+Last updated 2026-11-27. This is a handoff note between working sessions. The system spec is in `docs/`; this file tracks where the work stands. Keep one fact or next step per line, so updates change a line rather than rewrite a paragraph.
 
 ## Where things are
 
@@ -87,7 +87,9 @@ Last updated 2026-11-26. This is a handoff note between working sessions. The sy
 - **Merged 2026-11-25:** #22 (eef3338), ticket 0008: a `ready` row keeps its "Blocked by" and waits until each blocker is built (`list` shows `waiting on: …`, `claim next` skips it, `claim` refuses it, exit 2). New spec `docs/features/0008-ticket-system.md` for the whole ticket system; tests `scripts/test/ticket.test.sh`. Qodo's 4 findings and four independent rounds (Codex, opencode) all fixed or answered; the owner's session fixed them, since the runner's review rounds are part 2. Worktree and branch cleaned up.
 - **Part 2, "The runner fixes Qodo's findings on its PRs":** refined 2026-11-25/26 (6 review rounds, Q1–Q9) and approved, in PR #24 (`ready-0009`, number 0009 reserved). **Held open, not to merge** (the user, 2026-11-26): it's to be redesigned so the agents' own reviews and CI run each round, and Qodo once at the end.
 - **Qodo cost (2026-11-26):** the trial ended; the user started a paid subscription. Qodo re-reviews every push by default (PR #22: 9 times). Research in `docs/backlog/review-tools-research.md` proposes three backlog items: free static checks (ShellCheck, zizmor, gitleaks, lychee), agent reviews of a PR on the flat-rate subscriptions, and asking Qodo once per PR.
-- **Next:** the user picks from the research's three items; refine and build them in order; then redesign 0009 on them (replacing PR #24); then part 3, the timer; then 0004.
+- **Ticket 0010, "Agent reviews of a PR on our subscriptions"** (the research's item 2): refined 2026-11-26/27 (5 review rounds, Q1–Q5; Claude at `/code-review high` with `--effort high`, the user's choice) and approved 2026-11-27, in the ready PR from `ready-0010`. Until a session claims it by name, don't run the runner: it would claim 0010 and can't do its real-CLI check.
+- **ShellCheck** (the research's item 1, split into four rows, approved 2026-11-27): refined on local branch `refine-static-checks` (5 rounds, Q1–Q5 answered), not pushed. Waiting for the user to install ShellCheck (`sudo apt install shellcheck && sudo apt-mark hold shellcheck`), so today's findings can be counted before "Mark it ready?".
+- **Next:** mark ShellCheck ready and build it and 0010; then "Ask Qodo once per PR"; then redesign 0009 on them (replacing PR #24); then part 3, the timer; then 0004.
 - **Codex reviewer model:** `~/.codex/config.toml` no longer pins `model` (the user removed it 2026-11-25), so Codex takes its default, gpt-6.2-sol at the time; `model_reasoning_effort = "high"` stays. Each review's model is in the `codex exec` log header (`model: …`); record it in `reviewers.md` and the review records. opencode stays pinned with `-m` (`opencode models ollama-cloud` lists newer ones).
 - **Done (user, 2026-11-26):** Qodo's trial ended on PR #24, and the user started a paid subscription.
 - **Next (user):** confirm the `main` ruleset's bypass list is empty, on the ruleset's page.
