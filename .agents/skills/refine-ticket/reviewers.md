@@ -59,3 +59,5 @@ One row per reviewer per round. **Kept** findings were fixed in the doc or turne
 | 2026-11-26 | The runner fixes Qodo's findings on its PRs | 4 | opencode | ollama-cloud/glm-5.3 | 1 | 1 | 0 |
 | 2026-11-26 | The runner fixes Qodo's findings on its PRs | 5 | Codex | gpt-6.2-sol | 7 | 1 | 0 |
 | 2026-11-26 | The runner fixes Qodo's findings on its PRs | 5 | opencode | ollama-cloud/glm-5.3 | 4 | 0 | 0 |
+| 2026-11-26 | The runner fixes Qodo's findings on its PRs | 6 | Codex | gpt-6.2-sol | 8 | 0 | 0 |
+| 2026-11-26 | The runner fixes Qodo's findings on its PRs | 6 | opencode | ollama-cloud/glm-5.3 | 0 | 0 | 0 |
