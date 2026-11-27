@@ -1,6 +1,6 @@
 # A runner that builds a ready ticket into a PR
 
-Status: implemented: part 1 of 3, the runner run by hand. The other two parts are in the backlog: [the review step](../backlog/agent-review-rounds.md), which adds fix rounds on Qodo's findings, and [the timer](../backlog/agent-timer.md), which starts the runner every 15 minutes. Each edits this doc when it's built.
+Status: implemented: part 1 of 3, the runner run by hand. The other two parts are in the backlog: [the review step](../backlog/0009-agent-review-rounds.md), which adds fix rounds on Qodo's findings, and [the timer](../backlog/agent-timer.md), which starts the runner every 15 minutes. Each edits this doc when it's built.
 
 ## Summary
 

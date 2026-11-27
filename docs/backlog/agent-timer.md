@@ -4,7 +4,7 @@ Status: **designed**. When the user marks it `ready`, it gets a number and this 
 
 This is part 3 of 3, split on 2026-11-19 from "An agent that builds ready tickets on a timer":
 1. [A runner that builds a ready ticket into a PR](../features/0007-agent-runner.md). **Blocks this one.**
-2. [The runner fixes Qodo's findings on its PRs](agent-review-rounds.md). **Blocks this one.**
+2. [The runner fixes Qodo's findings on its PRs](0009-agent-review-rounds.md). **Blocks this one.**
 3. **This one:** the timer.
 
 Terms, the runner, and its checks are part 1's and part 2's. This doc only adds to them.
