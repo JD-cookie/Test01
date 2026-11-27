@@ -1,6 +1,6 @@
 # Project status
 
-Last updated 2026-11-25. This is a handoff note between working sessions. The system spec is in `docs/`; this file tracks where the work stands. Keep one fact or next step per line, so updates change a line rather than rewrite a paragraph.
+Last updated 2026-11-26. This is a handoff note between working sessions. The system spec is in `docs/`; this file tracks where the work stands. Keep one fact or next step per line, so updates change a line rather than rewrite a paragraph.
 
 ## Where things are
 
@@ -85,7 +85,8 @@ Last updated 2026-11-25. This is a handoff note between working sessions. The sy
 - **Merged 2026-11-25:** #21 (72de541), "Mark a blocked ticket `ready` before its blockers are built" marked ready as ticket 0008, the second small ticket (task 5).
 - **0007's check 9 passed (2026-11-25):** the user ran `scripts/agent-run.sh` by hand; it claimed 0008, built it in 32 minutes, the checks passed, and it opened PR #22 as `jd-cookie-agent[bot]`. Qodo reviews the App's PRs (0007 setup task 3 confirmed). Recorded in `docs/tickets/0008-ready-before-blockers.md`.
 - **Merged 2026-11-25:** #22 (eef3338), ticket 0008: a `ready` row keeps its "Blocked by" and waits until each blocker is built (`list` shows `waiting on: …`, `claim next` skips it, `claim` refuses it, exit 2). New spec `docs/features/0008-ticket-system.md` for the whole ticket system; tests `scripts/test/ticket.test.sh`. Qodo's 4 findings and four independent rounds (Codex, opencode) all fixed or answered; the owner's session fixed them, since the runner's review rounds are part 2. Worktree and branch cleaned up.
-- **Next:** refine part 2, "The runner fixes Qodo's findings on its PRs" (`docs/backlog/agent-review-rounds.md`; its blocker, part 1, is built, so it can be marked ready); then part 3, the timer (`agent-timer.md`); then 0004 for Day 4.
+- **Ticket 0009, The runner fixes Qodo's findings on its PRs** (part 2): refined 2026-11-25/26 in 6 review rounds (Codex gpt-6.2-sol, opencode glm-5.3; 107 findings: 97 fixed, 10 answered, 0 dropped), Q1–Q8 answered, approved by the user 2026-11-26. Marked `ready` in PR from `ready-0009`. Round 6's 8 fixes weren't reviewed again (the user's Q6). Its blocker, part 1, is built.
+- **Next:** the user merges the ready-0009 PR; then build 0009; then refine part 3, the timer (`agent-timer.md`); then 0004.
 - **Codex reviewer model:** `~/.codex/config.toml` no longer pins `model` (the user removed it 2026-11-25), so Codex takes its default, gpt-6.2-sol at the time; `model_reasoning_effort = "high"` stays. Each review's model is in the `codex exec` log header (`model: …`); record it in `reviewers.md` and the review records. opencode stays pinned with `-m` (`opencode models ollama-cloud` lists newer ones).
 - **Next (user):** set up Qodo billing before the trial ends (its PR comment says it ends soon).
 - **Next (user):** confirm the `main` ruleset's bypass list is empty, on the ruleset's page.

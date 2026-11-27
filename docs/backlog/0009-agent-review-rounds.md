@@ -1,6 +1,6 @@
 # The runner fixes Qodo's findings on its PRs
 
-Status: **designed**. When the user marks it `ready`, it gets a number and this doc is renamed `NNNN-agent-review-rounds.md`. In the PR that builds it, it moves to `docs/tickets/` (ticket 0006's layout), and that PR edits the runner's spec doc, `docs/features/0007-agent-runner.md`, in place.
+Status: ready (2026-11-26), as ticket 0009. In the PR that builds it, it moves to `docs/tickets/` (ticket 0006's layout), and that PR edits the runner's spec doc, `docs/features/0007-agent-runner.md`, in place.
 
 This is part 2 of 3, split on 2026-11-19 from "An agent that builds ready tickets on a timer":
 1. [A runner that builds a ready ticket into a PR](../features/0007-agent-runner.md): the runner, run by hand. **Blocks this one.**
@@ -348,6 +348,7 @@ Refined on its own 2026-11-25 by Claude Code (claude-opus-5-5), after part 1 (ti
   - Finding (Codex 7; blocking): step 1's 60-minute bound had no "now". Done: fixed, "now" is read at the start of step 1, and the cutoff at the start of step 3.
   - Finding (Codex 8; blocking): an abandoned round's commit pushed again by the user got two headings. Done: fixed, the heading follows the branch, with a note that it was abandoned (check 4).
   - Dropped: 0.
+- **Approved by the user:** 2026-11-26
 
 ## Decisions made for this ticket
 
