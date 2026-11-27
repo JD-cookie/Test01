@@ -51,3 +51,5 @@ One row per reviewer per round. **Kept** findings were fixed in the doc or turne
 | 2026-11-24 | Mark a blocked ticket `ready` before its blockers are built | 2 | opencode | ollama-cloud/deepseek-v4-pro | 0 | 0 | 0 |
 | 2026-11-25 | The runner fixes Qodo's findings on its PRs | 1 | Codex | gpt-6.2-sol | 13 | 1 | 0 |
 | 2026-11-25 | The runner fixes Qodo's findings on its PRs | 1 | opencode | ollama-cloud/glm-5.3 | 16 | 1 | 0 |
+| 2026-11-26 | The runner fixes Qodo's findings on its PRs | 2 | Codex | gpt-6.2-sol | 12 | 1 | 0 |
+| 2026-11-26 | The runner fixes Qodo's findings on its PRs | 2 | opencode | ollama-cloud/glm-5.3 | 3 | 0 | 0 |
