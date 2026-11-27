@@ -53,3 +53,5 @@ One row per reviewer per round. **Kept** findings were fixed in the doc or turne
 | 2026-11-26 | Agent reviews of a PR on our subscriptions | 1 | opencode | ollama-cloud/glm-5.3 | 15 | 1 | 0 |
 | 2026-11-26 | Agent reviews of a PR on our subscriptions | 2 | Codex | gpt-6.2-sol | 7 | 0 | 0 |
 | 2026-11-26 | Agent reviews of a PR on our subscriptions | 2 | opencode | ollama-cloud/glm-5.3 | 3 | 0 | 0 |
+| 2026-11-26 | Agent reviews of a PR on our subscriptions | 3 | Codex | gpt-6.2-sol | 5 | 1 | 0 |
+| 2026-11-26 | Agent reviews of a PR on our subscriptions | 3 | opencode | ollama-cloud/glm-5.3 | 3 | 1 | 0 |
